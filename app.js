@@ -290,8 +290,10 @@ const CAL_OPTS = ['Chest', 'Triceps', 'Biceps', 'Legs', 'Back', 'Shoulders', 'Ab
 const planOf = (u, day) => D.plans[u + '|' + day] || [];
 function calTile(v) {
   if (S.calTD !== TD) { S.calTD = TD; S.calSel = TD; S.calMonth = TD.slice(0, 7); }
-  let view = 'month'; try { view = localStorage.getItem('calView') || 'month'; } catch (_) { }
-  const sel = S.calSel, ed = editable() && v.id === S.me.id;
+  let view = 'day'; try { view = localStorage.getItem('calView2') || 'day'; } catch (_) { }
+  const sel = S.calSel, ed = editable() && v.id === S.me.id, saved = planOf(v.id, sel), editing = ed && (S.calEditing === sel || !saved.length);
+  if (S.calDraftDay !== sel || !editing) { S.calDraftDay = sel; if (!editing) S.calDraft = saved.slice(); else if (S.calDraftFor !== sel) S.calDraft = saved.slice(); }
+  S.calDraftFor = editing ? sel : null;
   const seg = (k, n) => `<button class="${view === k ? 'on' : ''}" data-calview="${k}">${n}</button>`;
   let main;
   if (view === 'day') {
@@ -307,11 +309,16 @@ function calTile(v) {
     main = `<div class="row sp" style="margin-bottom:8px"><button class="btn ghost sm" data-calmonth="-1" aria-label="Previous month">&lsaquo;</button><b style="font-size:16px">${first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</b><button class="btn ghost sm" data-calmonth="1" aria-label="Next month">&rsaquo;</button></div>
       <div class="cal7">${'SMTWTFS'.split('').map(x => `<span class="wd">${x}</span>`).join('')}${cells.join('')}</div>`;
   }
-  const items = planOf(v.id, sel), opts = [...CAL_OPTS, ...items.filter(x => !CAL_OPTS.includes(x))];
-  const planner = `<div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px"><div class="row sp"><div class="lbl">${view === 'day' ? 'Workout plan' : 'Plan for ' + pretty(sel)}</div>${sel !== TD ? '<button class="link" data-caltoday="1">Jump to today</button>' : ''}</div>
-    ${ed ? `<div class="chips">${opts.map(o => `<button class="ctl ${items.includes(o) ? 'on' : ''}" data-calpick="${esc(o)}">${esc(o)}</button>`).join('')}</div>
-      <div class="row" style="gap:8px"><input type="text" class="ctl" id="calcustom" placeholder="Something else (e.g. Knee rehab)" maxlength="40"><button class="btn sm ctl" data-caladd="1">Add</button></div>`
-      : `<p style="margin:8px 0 0;font-size:15px">${items.length ? esc(items.join(' + ')) : 'Nothing planned.'}</p>`}</div>`;
+  const draft = S.calDraft || [], opts = [...CAL_OPTS, ...draft.filter(x => !CAL_OPTS.includes(x))];
+  const head = `<div class="row sp"><div class="lbl">${view === 'day' ? 'Workout plan' : 'Plan for ' + pretty(sel)}</div>${sel !== TD ? '<button class="link" data-caltoday="1">Jump to today</button>' : ''}</div>`;
+  const body = editing
+    ? `<div class="chips">${opts.map(o => `<button class="ctl ${draft.includes(o) ? 'on' : ''}" data-calpick="${esc(o)}">${esc(o)}</button>`).join('')}</div>
+      <div class="row" style="gap:8px"><input type="text" class="ctl" id="calcustom" placeholder="Something else (e.g. Knee rehab)" maxlength="40"><button class="btn ghost sm ctl" data-caladd="1">Add</button></div>
+      <div class="row" style="margin-top:12px;gap:8px"><button class="btn ctl" data-calsave="1" style="flex:1">Save plan</button>${saved.length ? '<button class="btn ghost ctl" data-calcancel="1">Cancel</button>' : ''}</div>`
+    : saved.length
+      ? `<div style="margin:10px 0 0;font-size:20px;font-weight:700;line-height:1.3">${esc(saved.join(' + '))}</div>${ed ? '<div class="row" style="margin-top:12px"><button class="btn ghost sm ctl" data-caledit="1">Change plan</button></div>' : ''}`
+      : '<p class="note" style="margin:8px 0 0">Nothing planned.</p>';
+  const planner = `<div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">${head}${body}</div>`;
   return `<div class="card dtile" data-tile="cal">${GRIP}<div class="row sp" style="padding-right:44px;margin-bottom:12px"><div class="lbl">Calendar</div><div class="seg">${seg('day', 'Day')}${seg('month', 'Month')}</div></div>${main}${planner}</div>`;
 }
 async function saveDayPlan(u, day, items) {
@@ -346,6 +353,7 @@ function wCard(k, p) {
   return `<div class="card"><div class="row sp" style="margin-bottom:12px"><div class="lbl">${label}</div>${ring(54, 7, w.frac, COLORS[k])}</div>${body}</div>`;
 }
 function wLabel(k) { return k === 'indoor' ? 'Indoor workout' : 'Outdoor workout'; }
+const todaySetsAny = u => (D.sets[u] || []).some(r => r.day === TD);
 function vWorkouts() {
   if (S.view === 'split' && partner()) return splitWorkouts();
   const p = viewed();
@@ -353,12 +361,14 @@ function vWorkouts() {
   const tile = k => {
     const row = wRow(p.id, TD, k), w = wInfo(row);
     const st = w.st === 'done' ? `Done &middot; ${esc(row.type)}` : w.st === 'running' ? `${mmss(w.left)} left &middot; ${esc(row.type)}` : w.st === 'paused' ? `Paused &middot; ${mmss(w.left)} left` : 'Not started';
-    return `<div class="card wtile" data-open="${k}" role="button" tabindex="0"><div class="row sp"><div><div class="lbl">${wLabel(k)}</div><div id="ws-${k}" style="margin-top:6px;font-size:15px">${st}</div>${w.st === 'done' && p.id === S.me.id ? `<div style="margin-top:10px"><button class="btn amber sm" data-wundo="${k}">Undo</button></div>` : ''}</div><div class="row" style="gap:12px">${ring(54, 7, w.frac, COLORS[k])}<svg width="10" height="16" viewBox="0 0 10 16"><path d="M2 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/></svg></div></div></div>`;
+    return `<div class="card wtile" data-open="${k}" role="button" tabindex="0"><div class="row sp"><div><div class="lbl">${wLabel(k)}</div><div id="ws-${k}" style="margin-top:6px;font-size:15px">${st}</div>${p.id === S.me.id && (w.st !== 'idle' || (k === 'indoor' && todaySetsAny(p.id))) ? `<div class="row" style="margin-top:10px;gap:8px">${w.st === 'done' ? `<button class="btn amber sm" data-wundo="${k}">Undo</button>` : ''}<button class="btn red sm" data-wreset="${k}">Reset</button></div>` : ''}</div><div class="row" style="gap:12px">${ring(54, 7, w.frac, COLORS[k])}<svg width="10" height="16" viewBox="0 0 10 16"><path d="M2 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/></svg></div></div></div>`;
   };
   return header('Work<em>outs</em>') + testBar(p) + `<p class="note" style="margin-top:-4px">Tap a workout to open it.</p>` + tile('indoor') + tile('outdoor');
 }
 const MUSCLES = [['chest', 'Chest'], ['triceps', 'Triceps'], ['biceps', 'Biceps'], ['legs', 'Legs'], ['back', 'Back'], ['shoulders', 'Shoulders'], ['abs', 'Abs']];
-const MNAME = Object.fromEntries(MUSCLES);
+const EXTRA = [['yoga', 'Yoga'], ['pilates', 'Pilates'], ['treadmill', 'Treadmill'], ['cycling', 'Cycling'], ['hiit', 'HIIT']];
+const MNAME = Object.fromEntries([...MUSCLES, ...EXTRA]);
+const LMUS = MUSCLES.map(x => x[0]);
 const LIB = {
   chest: ['Flat barbell bench press', 'Incline barbell bench press', 'Decline barbell bench press', 'Flat dumbbell press', 'Incline dumbbell press', 'Decline dumbbell press', 'Dumbbell fly', 'Incline dumbbell fly', 'Cable crossover', 'Low-to-high cable fly', 'Machine chest press', 'Pec deck', 'Push-up', 'Chest dips', 'Landmine press', 'Svend press'],
   triceps: ['Triceps rope pushdown', 'Straight-bar pushdown', 'Overhead dumbbell extension', 'Overhead cable extension', 'Skull crusher', 'Close-grip bench press', 'Triceps dips', 'Bench dips', 'Diamond push-up', 'Dumbbell kickback', 'Single-arm cable pushdown', 'JM press'],
@@ -368,6 +378,13 @@ const LIB = {
   shoulders: ['Barbell overhead press', 'Dumbbell shoulder press', 'Arnold press', 'Machine shoulder press', 'Push press', 'Dumbbell lateral raise', 'Cable lateral raise', 'Front raise', 'Rear delt fly', 'Reverse pec deck', 'Upright row', 'Landmine press', 'Face pull', 'Barbell shrug']
 };
 LIB.abs = ['Crunch', 'Bicycle crunch', 'Reverse crunch', 'Cable crunch', 'Decline sit-up', 'Sit-up', 'V-up', 'Toe touch', 'Hanging knee raise', 'Hanging leg raise', 'Captain\'s chair leg raise', 'Lying leg raise', 'Flutter kicks', 'Scissor kicks', 'Russian twist', 'Weighted Russian twist', 'Woodchopper', 'Pallof press', 'Ab wheel rollout', 'Mountain climber', 'Heel touch', 'Dead bug', 'Bird dog', 'Plank', 'Side plank', 'Plank shoulder tap', 'Hollow hold', 'Machine ab crunch', 'Landmine twist'];
+Object.assign(LIB, {
+  yoga: ['Sun salutation A', 'Sun salutation B', 'Vinyasa flow', 'Hatha flow', 'Power yoga', 'Ashtanga primary series', 'Yin yoga', 'Restorative yoga', 'Hot yoga (Bikram style)', 'Kundalini kriya', 'Yoga nidra', 'Morning wake-up flow', 'Evening wind-down flow', 'Hip opener sequence', 'Hamstring and low back stretch', 'Shoulder and neck release', 'Core strength flow', 'Balance flow (tree, eagle, warrior III)', 'Warrior flow (I, II, III)', 'Chair yoga', 'Yoga for runners', 'Yoga for knees and hips', 'Backbend sequence', 'Twist and detox flow', 'Standing flow', 'Seated stretch sequence', 'Moon salutation', 'Full body stretch', 'Sleep yoga', 'Breathwork and meditation (pranayama)'],
+  pilates: ['The Hundred', 'Roll-up', 'Single-leg circles', 'Rolling like a ball', 'Single-leg stretch', 'Double-leg stretch', 'Scissors', 'Spine stretch forward', 'Open-leg rocker', 'Corkscrew', 'Saw', 'Swan', 'Single-leg kick', 'Double-leg kick', 'Neck pull', 'Shoulder bridge', 'Side kick series', 'Teaser', 'Swimming', 'Leg pull front', 'Leg pull back', 'Mermaid', 'Boomerang', 'Seal', 'Side bend', 'Criss-cross', 'Mat Pilates full class', 'Pilates wall workout', 'Pilates with ring', 'Pilates with small ball', 'Pilates glutes and thighs', 'Pilates core burner', 'Reformer footwork', 'Reformer full body'],
+  treadmill: ['Easy jog', 'Steady-state run', 'Brisk walk', 'Incline walk (12-3-30)', 'Hill climb intervals', 'Sprint intervals (30 on / 30 off)', 'Tempo run', 'Fartlek run', 'Pyramid intervals', 'Long slow run', 'Walk/run intervals', 'Recovery walk', 'Progressive speed run', 'Incline power hike', '5K run', '10K run', 'Warm-up walk', 'Cool-down walk'],
+  cycling: ['Assault bike intervals', 'Assault bike sprints', 'Zone 2 steady ride', 'Tabata ride', 'Hill climb ride', 'Sprint intervals', 'Tempo ride', 'Recovery spin', 'Pyramid ride', 'Spin class', 'Endurance ride', 'Standing climbs', 'Low-resistance cadence drills', 'Heavy-resistance strength ride', 'Warm-up spin', 'Cool-down spin'],
+  hiit: ['Burpees', 'Jump squats', 'Mountain climbers', 'High knees', 'Jumping jacks', 'Kettlebell swings', 'Box jumps', 'Battle ropes', 'Skater jumps', 'Squat thrusts', 'Plank jacks', 'Jump lunges', 'Tuck jumps', 'Sled push', 'Rowing sprints', 'Medicine ball slams', 'Shadow boxing', 'Bear crawls', 'Star jumps', 'Push-up burpee combo', 'Tabata circuit', 'EMOM circuit', 'AMRAP circuit', '30/30 full body circuit', 'Jump rope intervals', 'Stair sprints']
+});
 const TIMED = new Set(['Wall sit', 'Dead hang', 'Plank', 'Side plank', 'Hollow hold']);
 const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (_) { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) { } };
@@ -401,6 +418,11 @@ function fmtSet(r) {
   if (r.seconds != null) return (w ? w + ' &middot; ' : '') + fmtTime(r.seconds);
   return w ? `${w} x ${r.reps}` : `${r.reps} reps`;
 }
+function syncType(ty) {
+  lInit(); const key = ty.toLowerCase();
+  if (ty === 'Lift') S.lsel = S.lsel.filter(m => LMUS.includes(m));
+  else if (S.lsel.length !== 1 || S.lsel[0] !== key) { S.lsel = [key]; if (S.lstep === 'pick') S.lstep = 'plan'; }
+}
 function liftPick(p) {
   const sel = lsel(), mine = p.id === S.me.id;
   if (!mine) {
@@ -412,9 +434,11 @@ function liftPick(p) {
   const chips = MUSCLES.map(([k, n]) => `<button data-msel="${k}" class="ctl ${sel.includes(k) ? 'on' : ''}">${n}</button>`).join('');
   const logged = (D.sets[p.id] || []).filter(r => r.day === TD).length;
   const IT = [['Lift', 'Lifting'], ['Yoga', 'Yoga'], ['Pilates', 'Pilates'], ['Treadmill', 'Treadmill'], ['Cycling', 'Cycling'], ['HIIT', 'HIIT']];
-  const ty = S.wtype.indoor || 'Lift', lift = ty === 'Lift';
-  const typeQ = `<div class="lbl" style="margin-bottom:8px">What indoor workout are we going to target?</div><select data-wtype="indoor">${IT.map(([v, n]) => `<option value="${v}" ${v === ty ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
-  if (!lift) return `<div class="card">${typeQ}<div class="row" style="margin-top:14px"><button class="btn ctl" id="lgo2">Let's get after it!</button></div></div>`;
+  const live = wRow(p.id, TD, 'indoor'), busy = wInfo(live).st !== 'idle';
+  const ty = busy && IT.some(x => x[0] === live.type) ? live.type : (S.wtype.indoor || 'Lift'), lift = ty === 'Lift';
+  S.wtype.indoor = ty; syncType(ty);
+  const typeQ = `<div class="lbl" style="margin-bottom:8px">What indoor workout are we going to target?</div><select data-wtype="indoor" ${busy ? 'disabled' : ''}>${IT.map(([v, n]) => `<option value="${v}" ${v === ty ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
+  if (!lift) return `<div class="card">${typeQ}${planSection()}</div>`;
   return `<div class="card">${typeQ}<div class="lbl" style="margin:18px 0 4px">What are we training?</div><p class="note" style="margin:0 0 4px">Pick one or more muscle groups.</p><div class="chips">${chips}</div>
     <div class="row" style="margin-top:6px"><button class="btn ctl" id="lsubmit" ${sel.length ? '' : 'disabled style="opacity:.45"'}>Next</button></div>
     ${lstep() === 'plan' ? planSection() : ''}
@@ -430,7 +454,7 @@ function planSection() {
       ${other ? `<div class="row" style="margin-top:10px;gap:8px"><input type="text" class="ctl" id="pcustom-${m}" placeholder="Lift name" maxlength="80"><button class="btn sm ctl" data-paddc="${m}">Add</button></div>` : ''}</div>`;
   };
   const total = sel.reduce((n, m) => n + (plan[m] || []).length, 0);
-  return `<div style="border-top:1px solid var(--line);margin-top:18px;padding-top:16px"><div class="lbl">Pick your lifts</div><p class="note" style="margin:6px 0 0">Tap every lift you want to do for each muscle group.</p>
+  return `<div style="border-top:1px solid var(--line);margin-top:18px;padding-top:16px"><div class="lbl">${(S.wtype.indoor || 'Lift') === 'Lift' ? 'Pick your lifts' : 'Pick your workouts'}</div><p class="note" style="margin:6px 0 0">${(S.wtype.indoor || 'Lift') === 'Lift' ? 'Tap every lift you want to do for each muscle group.' : 'Tap every workout you want to do. Use + Other for your own.'}</p>
     ${sel.map(block).join('')}
     <div class="row" style="margin-top:18px"><button class="btn ctl" id="lgo" ${total ? '' : 'disabled style="opacity:.45"'}>Let's get after it!</button></div></div>`;
 }
@@ -518,9 +542,8 @@ function startCountdown() {
   }, 1000);
 }
 function vWorkoutPage(k, p) {
-  let rowT;
   return header(k === 'indoor' ? '<em>Indoor</em>' : '<em>Outdoor</em>') + testBar(p) +
-    (S.hist && k === 'indoor' ? '' : `<div class="row" style="margin-bottom:14px"><button class="btn ghost sm" data-back="1">&lsaquo; Back to workouts</button></div>`) + (k === 'indoor' ? (p.id === S.me.id && (rowT = wRow(p.id, TD, 'indoor')) && wInfo(rowT).st !== 'idle' && rowT.type !== 'Lift' ? wCard(k, p) : p.id === S.me.id && lstep() === 'go' ? (S.hist ? liftHistory(p) : wCard(k, p) + liftSession(p)) : liftPick(p) + wCard(k, p)) : `<div class="card"><div class="lbl">${wLabel(k)} page</div><p style="margin:10px 0 0;font-size:15px">This is the ${k} workout page. Test text for now. More features are coming here.</p></div>` + wCard(k, p));
+    (S.hist && k === 'indoor' ? '' : `<div class="row" style="margin-bottom:14px"><button class="btn ghost sm" data-back="1">&lsaquo; Back to workouts</button></div>`) + (k === 'indoor' ? (p.id === S.me.id && lstep() === 'go' ? (S.hist ? liftHistory(p) : wCard(k, p) + liftSession(p)) : wCard(k, p) + liftPick(p)) : `<div class="card"><div class="lbl">${wLabel(k)} page</div><p style="margin:10px 0 0;font-size:15px">This is the ${k} workout page. Test text for now. More features are coming here.</p></div>` + wCard(k, p));
 }
 
 function vMeals() {
@@ -820,27 +843,23 @@ document.addEventListener('click', async e => {
   if (t.id === 'atoggle') { S.authMode = S.authMode === 'up' ? 'in' : 'up'; render(); return; }
   if (!S.me) return;
   if (d.tab) { S.tab = d.tab; S.sub = null; $('app').scrollTo(0, 0); render(); return; }
-  if (d.calview) { try { localStorage.setItem('calView', d.calview); } catch (_) { } render(); return; }
+  if (d.calview) { try { localStorage.setItem('calView2', d.calview); } catch (_) { } render(); return; }
   if (d.calday) { S.calSel = d.calday; render(); return; }
   if (d.calstep) { S.calSel = addDays(S.calSel, +d.calstep); S.calMonth = S.calSel.slice(0, 7); render(); return; }
   if (d.caltoday) { S.calSel = TD; S.calMonth = TD.slice(0, 7); render(); return; }
   if (d.calmonth) { const [y, m] = S.calMonth.split('-').map(Number), n = new Date(y, m - 1 + (+d.calmonth), 1); S.calMonth = `${n.getFullYear()}-${pad(n.getMonth() + 1)}`; render(); return; }
-  if (d.calpick || d.caladd) {
+  if (d.calpick || d.caladd || d.calsave || d.caledit || d.calcancel) {
     if (!editable()) return;
-    const cur = planOf(u, S.calSel).slice(); let name = d.calpick;
-    if (d.caladd) { const inp = $('calcustom'); name = inp ? inp.value.trim() : ''; if (!name) { toast('Type a workout first.'); return; } if (!cur.includes(name)) cur.push(name); saveDayPlan(u, S.calSel, cur); return; }
-    const i = cur.indexOf(name); if (i >= 0) cur.splice(i, 1); else cur.push(name);
-    saveDayPlan(u, S.calSel, cur); return;
+    const sel = S.calSel, cur = (S.calDraft || []).slice();
+    if (d.caledit) { S.calEditing = sel; S.calDraft = planOf(u, sel).slice(); S.calDraftFor = sel; render(); return; }
+    if (d.calcancel) { S.calEditing = null; S.calDraftFor = null; render(); return; }
+    if (d.calsave) { S.calEditing = null; S.calDraftFor = null; saveDayPlan(u, sel, cur); toast(cur.length ? 'Plan saved.' : 'Plan cleared.'); return; }
+    if (d.caladd) { const inp = $('calcustom'), name = inp ? inp.value.trim() : ''; if (!name) { toast('Type a workout first.'); return; } if (!cur.includes(name)) cur.push(name); S.calDraft = cur; render(); return; }
+    const i = cur.indexOf(d.calpick); if (i >= 0) cur.splice(i, 1); else cur.push(d.calpick);
+    S.calDraft = cur; render(); return;
   }
   if (d.msel) { const sel = lsel(), i = sel.indexOf(d.msel); if (i >= 0) sel.splice(i, 1); else sel.push(d.msel); lSave(); render(); return; }
   if (t.id === 'lsubmit') { if (!lsel().length) return; setLstep('plan'); render(); return; }
-  if (t.id === 'lgo2') {
-    if (!editable()) return;
-    const o = wInfo(wRow(u, TD, 'outdoor'));
-    if (o.st === 'running' || o.st === 'paused') { toast('Finish your outdoor workout first.'); return; }
-    if (wInfo(wRow(u, TD, 'indoor')).st === 'idle') startCountdown();
-    return;
-  }
   if (t.id === 'lgo') {
     if (!editable() || !lsel().length) return;
     const w = wInfo(wRow(u, TD, 'indoor')), o = wInfo(wRow(u, TD, 'outdoor'));
@@ -893,6 +912,20 @@ document.addEventListener('click', async e => {
   }
   if (!editable()) return;
   if (d.lsdel) { D.sets[u] = (D.sets[u] || []).filter(x => x.id !== d.lsdel); render(); const { error } = await sb.from('lift_sets').delete().eq('id', d.lsdel); if (error) { toast(error.message); await loadAll(); render(); } return; }
+  if (d.wreset) {
+    const k = d.wreset;
+    if (!confirm(`Reset your ${k} workout? The timer goes back to Not started${k === 'indoor' ? ' and your workout plan clears' : ''}.`)) return;
+    const clear = k === 'indoor' && todaySetsAny(u) && confirm('Also delete the sets you logged today?\n\nOK = delete them\nCancel = keep them');
+    delete D.workouts[u + '|' + TD + '|' + k];
+    try { localStorage.removeItem(`n45-${u}-${TD}-${k}`); } catch (_) { }
+    if (k === 'indoor') { S.linit = false; S.hist = null; lsSet(lKey('lsess'), null); S.wtype.indoor = 'Lift'; }
+    if (clear) D.sets[u] = (D.sets[u] || []).filter(x => x.day !== TD);
+    render();
+    const r1 = await sb.from('workouts').delete().match({ user_id: u, day: TD, kind: k });
+    const r2 = clear ? await sb.from('lift_sets').delete().match({ user_id: u, day: TD }) : {};
+    if (r1.error || r2.error) { toast((r1.error || r2.error).message); await loadAll(); render(); } else toast('Reset.');
+    return;
+  }
   if (d.wundo) {
     const k = d.wundo, row = wRow(u, TD, k); if (!row || !row.done_at) return;
     const stopAt = +new Date(row.paused_at || row.done_at), el = stopAt - +new Date(row.started_at) - (row.paused_ms || 0);
@@ -983,7 +1016,7 @@ document.addEventListener('click', async e => {
 });
 document.addEventListener('change', async e => {
   const t = e.target;
-  if (t.dataset.wtype) { S.wtype[t.dataset.wtype] = t.value; if (t.dataset.wtype === 'indoor') render(); return; }
+  if (t.dataset.wtype) { S.wtype[t.dataset.wtype] = t.value; if (t.dataset.wtype === 'indoor') { syncType(t.value); lSave(); render(); } return; }
   if (t.id === 'lpick') { const n = $('lname'); if (t.value === '__custom') { n.style.display = ''; n.value = ''; n.focus(); } else { n.style.display = 'none'; n.value = t.value; } return; }
   if (t.id === 'ph' && t.files[0]) uploadPhoto(t.files[0], TD);
   if (t.id === 'phOld' && t.files[0]) {
