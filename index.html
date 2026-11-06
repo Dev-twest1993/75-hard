@@ -56,6 +56,17 @@ svg .glow{filter:drop-shadow(0 0 6px currentColor)}
 @keyframes cdpulse{0%{transform:scale(.3);opacity:0}30%{transform:scale(1.35);opacity:1}55%{transform:scale(.85)}80%{transform:scale(1.12)}100%{transform:scale(1);opacity:.95}}
 .btn.amber{background:#f0b44c;color:#1d1403;box-shadow:0 6px 22px rgba(240,180,76,.28)}
 .btn.blue{background:#4fa8ff;color:#04121f;box-shadow:0 6px 22px rgba(79,168,255,.28)}
+.btn.red{background:#ff6b6b;color:#1f0606;box-shadow:0 6px 22px rgba(255,107,107,.28)}
+.cal7{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal7 .wd{font-size:10px;color:var(--dim);text-align:center;font-weight:700;padding-bottom:2px}
+.cal7 button.cd{aspect-ratio:1;border-radius:10px;border:1px solid transparent;background:rgba(255,255,255,.05);color:var(--text);font-size:13px;font-weight:600;position:relative;padding:0}
+.cal7 button.cd.today{background:#2fd98f;color:#04140c}
+.cal7 button.cd.sel{border-color:#fff}
+.cal7 button.cd.has::after{content:'';position:absolute;bottom:4px;left:50%;width:5px;height:5px;margin-left:-2.5px;border-radius:50%;background:#4fa8ff}
+.cal7 button.cd.today.has::after{background:#04140c}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.seg button{background:none;border:0;color:var(--dim);padding:6px 12px;font-size:12px;font-weight:700}
+.seg button.on{background:rgba(47,217,143,.2);color:var(--text)}
 .btn.violet{background:rgba(167,139,250,.16);color:#d9ccff;border:1px solid rgba(167,139,250,.5);box-shadow:none}
 .btn[disabled]{pointer-events:none}
 .lbtns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0 4px}
@@ -128,7 +139,7 @@ input[type=range]{width:100%;accent-color:#2fd98f;margin-top:12px}
 .over .box2{max-width:380px;text-align:center;border:1px solid rgba(255,255,255,.14);border-radius:32px;padding:34px 24px;background:linear-gradient(160deg,rgba(18,98,64,.75),rgba(6,20,13,.96));box-shadow:0 20px 70px rgba(47,217,143,.25)}
 .over .box2 .e{font-size:12px;letter-spacing:.22em;color:var(--acc2);text-transform:uppercase;font-weight:700}
 .over .box2 .m{font-family:var(--serif);font-style:italic;font-size:27px;line-height:1.3;margin:16px 0 24px}
-.banner{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 10px);transform:translate(-50%,-160%);z-index:30;width:min(398px,calc(100% - 20px));display:flex;gap:12px;align-items:flex-start;background:rgba(32,40,36,.9);border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:12px 14px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 12px 40px rgba(0,0,0,.55);transition:transform .45s cubic-bezier(.2,.9,.3,1)}
+.banner{position:fixed;left:50%;top:calc(max(var(--top,0px),env(safe-area-inset-top)) + 10px);transform:translate(-50%,-200%);z-index:30;width:min(398px,calc(100% - 20px));display:flex;gap:12px;align-items:flex-start;background:rgba(32,40,36,.9);border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:12px 14px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 12px 40px rgba(0,0,0,.55);transition:transform .45s cubic-bezier(.2,.9,.3,1)}
 .banner.show{transform:translate(-50%,0)}
 .banner .ic{width:38px;height:38px;border-radius:10px;background:linear-gradient(145deg,#1f7a55,#0b3a28);display:flex;align-items:center;justify-content:center;flex:none;border:1px solid rgba(255,255,255,.14)}
 .banner .t{display:flex;justify-content:space-between;font-size:13px;font-weight:700}

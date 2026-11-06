@@ -36,7 +36,7 @@ let TD = ymd(new Date());
 
 // ---------- state ----------
 const S = { tab: 'today', view: 'me', user: null, me: null, wtype: {}, ovr: {}, nIdx: 0, urls: {}, dirty: false, restartSnooze: false, authMode: 'in', busy: false };
-const D = { profiles: [], daily: {}, workouts: {}, books: {}, weigh: {}, groceries: [], meals: {}, sets: {} };
+const D = { plans: {}, profiles: [], daily: {}, workouts: {}, books: {}, weigh: {}, groceries: [], meals: {}, sets: {} };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const $ = id => document.getElementById(id);
 const dkey = (u, d) => u + '|' + d;
@@ -50,17 +50,18 @@ async function must(p) { const r = await p; if (r.error) { toast(r.error.message
 
 // ---------- data ----------
 async function loadAll() {
-  const [p, d, w, b, wi, g, m, lf] = await Promise.all([
+  const [p, d, w, b, wi, g, m, lf, wp] = await Promise.all([
     sb.from('profiles').select('*'), sb.from('daily').select('*'), sb.from('workouts').select('*'),
     sb.from('books').select('*').order('created_at'), sb.from('weigh_ins').select('*').order('day_num'),
-    sb.from('groceries').select('*').order('created_at'), sb.from('meal_plan').select('*'), sb.from('lift_sets').select('*').order('created_at')
+    sb.from('groceries').select('*').order('created_at'), sb.from('meal_plan').select('*'), sb.from('lift_sets').select('*').order('created_at'), sb.from('workout_plans').select('*')
   ]);
-  for (const r of [p, d, w, b, wi, g, m, lf]) if (r.error) { toast(r.error.message); return; }
+  for (const r of [p, d, w, b, wi, g, m, lf, wp]) if (r.error) { toast(r.error.message); return; }
   D.profiles = p.data;
   D.daily = {}; d.data.forEach(r => D.daily[dkey(r.user_id, r.day)] = r);
   D.workouts = {}; w.data.forEach(r => D.workouts[r.user_id + '|' + r.day + '|' + r.kind] = r);
   D.books = {}; b.data.forEach(r => (D.books[r.user_id] ||= []).push(r));
   D.weigh = {}; wi.data.forEach(r => (D.weigh[r.user_id] ||= []).push(r));
+  D.plans = {}; wp.data.forEach(r => D.plans[r.user_id + '|' + r.day] = r.items);
   D.groceries = g.data;
   D.sets = {}; lf.data.forEach(r => (D.sets[r.user_id] ||= []).push(r));
   D.meals = {}; m.data.forEach(r => D.meals[r.day_idx + '|' + r.slot] = r.text);
@@ -106,11 +107,17 @@ function firstMissedDay(p) {
   for (let i = 0; i < Math.min(n - 1, 75); i++) { const d = addDays(p.start_date, i); if (!complete(p.id, d)) return d; }
   return null;
 }
+function notify45(k) {
+  const key = `n45-${S.user.id}-${TD}-${k}`; try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (_) { }
+  const msg = `${k === 'indoor' ? 'Indoor' : 'Outdoor'} workout: 45 minutes are up!`;
+  toast(msg); try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (_) { }
+  if ('Notification' in window && Notification.permission === 'granted' && navigator.serviceWorker) navigator.serviceWorker.ready.then(r => r.showNotification('Workout complete', { body: msg, tag: 'w45-' + k })).catch(() => { });
+}
 async function persistDone() {
   for (const row of Object.values(D.workouts)) {
     if (row.user_id !== S.user.id || row.done_at) continue;
     const i = wInfo(row);
-    if (i.persist) { row.done_at = new Date(i.end).toISOString(); sb.from('workouts').update({ done_at: row.done_at }).match({ user_id: row.user_id, day: row.day, kind: row.kind }); }
+    if (i.persist) { if (row.day === TD) notify45(row.kind); row.done_at = new Date(i.end).toISOString(); sb.from('workouts').update({ done_at: row.done_at }).match({ user_id: row.user_id, day: row.day, kind: row.kind }); }
   }
 }
 
@@ -213,11 +220,11 @@ function testBar(p) { return dayNum(p) < 1 ? `<div class="roBar" style="color:va
 function dietBtn(p) { const r = dailyRow(p.id, TD); return `<button class="check ctl" id="diet"><span class="box ${r.diet ? 'on' : ''}">${r.diet ? tick : ''}</span><span>No cheat meals. No alcohol.</span></button>`; }
 
 const GRIP = '<button class="grip" aria-label="Drag to reorder"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></button>';
-const TILE_IDS = ['days', 'all', 'single'];
+const TILE_IDS = ['days', 'all', 'single', 'cal'];
 function tileOrder() {
   try {
     let o = JSON.parse(localStorage.getItem('tileOrder'));
-    if (Array.isArray(o)) { o = o.filter(k => TILE_IDS.includes(k)); for (const k of TILE_IDS) if (!o.includes(k)) o.unshift(k); if (o.length === 3) return o; }
+    if (Array.isArray(o)) { o = o.filter(k => TILE_IDS.includes(k)); for (const k of TILE_IDS) if (!o.includes(k)) o.push(k); if (o.length === TILE_IDS.length) return o; }
   } catch (_) { }
   return TILE_IDS.slice();
 }
@@ -272,9 +279,46 @@ function vToday() {
       ? `<div class="card dtile" data-tile="days">${GRIP}<div class="big">${ring(280, 13, c.frac, '#2fd98f', `<span class="days">${c.left}</span><span class="dayslbl">${c.sub}</span>`)}</div>${c.note ? `<p class="note" style="text-align:center;margin:0">${c.note}</p>` : ''}</div>`
       : k === 'all'
         ? `<div class="card dtile" data-tile="all">${GRIP}${allRings(v.id)}</div>`
+        : k === 'cal' ? calTile(v)
         : `<div class="card dtile" data-tile="single">${GRIP}<div class="lbl" style="margin-bottom:14px">Today's rings</div><div class="rings">${small}</div></div>`).join('')}</div>
     ${dietBtn(v)}<div style="height:14px"></div>${other}
     <div style="text-align:center;margin-top:8px"><button class="link" id="signout">Sign out</button></div>`;
+}
+
+// ---------- calendar tile ----------
+const CAL_OPTS = ['Chest', 'Triceps', 'Biceps', 'Legs', 'Back', 'Shoulders', 'Abs', 'Cardio', 'Yoga', 'Pilates', 'Treadmill', 'Cycling', 'HIIT', 'Rest day'];
+const planOf = (u, day) => D.plans[u + '|' + day] || [];
+function calTile(v) {
+  if (S.calTD !== TD) { S.calTD = TD; S.calSel = TD; S.calMonth = TD.slice(0, 7); }
+  let view = 'month'; try { view = localStorage.getItem('calView') || 'month'; } catch (_) { }
+  const sel = S.calSel, ed = editable() && v.id === S.me.id;
+  const seg = (k, n) => `<button class="${view === k ? 'on' : ''}" data-calview="${k}">${n}</button>`;
+  let main;
+  if (view === 'day') {
+    const dt = parseYmd(sel), title = dt.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    main = `<div class="row sp" style="margin-bottom:6px"><button class="btn ghost sm" data-calstep="-1" aria-label="Previous day">&lsaquo;</button><div style="text-align:center"><b style="font-size:16px">${title}</b>${sel === TD ? '<div><span class="badge good">Today</span></div>' : ''}</div><button class="btn ghost sm" data-calstep="1" aria-label="Next day">&rsaquo;</button></div>`;
+  } else {
+    const [y, m] = S.calMonth.split('-').map(Number), first = new Date(y, m - 1, 1), nd = new Date(y, m, 0).getDate();
+    const cells = []; for (let i = 0; i < first.getDay(); i++) cells.push('<span></span>');
+    for (let d = 1; d <= nd; d++) {
+      const ds = `${y}-${pad(m)}-${pad(d)}`;
+      cells.push(`<button class="cd ${ds === TD ? 'today' : ''} ${ds === sel ? 'sel' : ''} ${planOf(v.id, ds).length ? 'has' : ''}" data-calday="${ds}">${d}</button>`);
+    }
+    main = `<div class="row sp" style="margin-bottom:8px"><button class="btn ghost sm" data-calmonth="-1" aria-label="Previous month">&lsaquo;</button><b style="font-size:16px">${first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</b><button class="btn ghost sm" data-calmonth="1" aria-label="Next month">&rsaquo;</button></div>
+      <div class="cal7">${'SMTWTFS'.split('').map(x => `<span class="wd">${x}</span>`).join('')}${cells.join('')}</div>`;
+  }
+  const items = planOf(v.id, sel), opts = [...CAL_OPTS, ...items.filter(x => !CAL_OPTS.includes(x))];
+  const planner = `<div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px"><div class="row sp"><div class="lbl">${view === 'day' ? 'Workout plan' : 'Plan for ' + pretty(sel)}</div>${sel !== TD ? '<button class="link" data-caltoday="1">Jump to today</button>' : ''}</div>
+    ${ed ? `<div class="chips">${opts.map(o => `<button class="ctl ${items.includes(o) ? 'on' : ''}" data-calpick="${esc(o)}">${esc(o)}</button>`).join('')}</div>
+      <div class="row" style="gap:8px"><input type="text" class="ctl" id="calcustom" placeholder="Something else (e.g. Knee rehab)" maxlength="40"><button class="btn sm ctl" data-caladd="1">Add</button></div>`
+      : `<p style="margin:8px 0 0;font-size:15px">${items.length ? esc(items.join(' + ')) : 'Nothing planned.'}</p>`}</div>`;
+  return `<div class="card dtile" data-tile="cal">${GRIP}<div class="row sp" style="padding-right:44px;margin-bottom:12px"><div class="lbl">Calendar</div><div class="seg">${seg('day', 'Day')}${seg('month', 'Month')}</div></div>${main}${planner}</div>`;
+}
+async function saveDayPlan(u, day, items) {
+  if (items.length) D.plans[u + '|' + day] = items; else delete D.plans[u + '|' + day];
+  render();
+  const { error } = items.length ? await sb.from('workout_plans').upsert({ user_id: u, day, items }) : await sb.from('workout_plans').delete().match({ user_id: u, day });
+  if (error) { toast(error.message); await loadAll(); render(); }
 }
 function greet() { const h = new Date().getHours(); return h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'; }
 
@@ -285,15 +329,16 @@ function lateRow(k, p) {
 }
 function wCard(k, p) {
   const w = wInfo(wRow(p.id, TD, k)), other = wInfo(wRow(p.id, TD, k === 'indoor' ? 'outdoor' : 'indoor'));
-  const label = k === 'indoor' ? 'Indoor workout' : 'Outdoor workout';
+  const label = k === 'indoor' ? 'Indoor Workout' : 'Outdoor Workout';
   const types = k === 'indoor' ? ['Lift', 'Yoga', 'Pilates', 'Treadmill', 'Cycling', 'HIIT'] : ['Walk', 'Run', 'Hike', 'Bike ride', 'Sports'];
   const row = wRow(p.id, TD, k);
   let body = '';
+  if (k === 'indoor' && w.st === 'idle') return '';
   if (w.st === 'done') body = `<div class="timer">Done</div><div class="note">${esc(row.type)} &middot; 45 min complete</div>${p.id === S.me.id ? `<div class="row" style="margin-top:12px"><button class="btn amber sm" data-wundo="${k}">Undo</button></div>` : ''}`;
   else if (w.st === 'running' || w.st === 'paused') {
     const ps = w.st === 'paused', mine = p.id === S.me.id;
     body = `<div class="timer" id="t-${k}">${mmss(w.left)}</div><div class="note">${esc(row.type)} ${ps ? 'is paused. The clock is stopped.' : 'in progress. It closes on its own at 45 minutes.'}</div>` +
-      (mine ? `<div class="row" style="margin-top:12px;gap:8px"><button class="btn sm" data-${ps ? 'resume' : 'pause'}="${k}">${ps ? 'Resume' : 'Pause'}</button><button class="btn ghost sm" data-restart="${k}">Restart</button><button class="btn ghost sm" data-stop="${k}">Stop</button></div><div class="row" style="margin-top:10px"><button class="btn sm" data-fin="${k}">Complete workout</button></div>` : '');
+      (mine ? `<div class="lbtns"><button class="btn sm amber" data-${ps ? 'resume' : 'pause'}="${k}">${ps ? 'Resume' : 'Pause'}</button><button class="btn sm blue" data-restart="${k}">Restart</button><button class="btn sm red" data-stop="${k}">Stop</button><button class="btn sm" data-fin="${k}">Complete Workout</button></div>` : '');
   }
   else if (other.st === 'running' || other.st === 'paused') body = `<div class="note">Finish your other workout first.</div>`;
   else body = `<select data-wtype="${k}">${types.map(t => `<option ${t === (S.wtype[k] || types[0]) ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="row" style="margin-top:14px"><button class="btn" data-start="${k}">Start 45 min</button></div>`;
@@ -312,7 +357,7 @@ function vWorkouts() {
   };
   return header('Work<em>outs</em>') + testBar(p) + `<p class="note" style="margin-top:-4px">Tap a workout to open it.</p>` + tile('indoor') + tile('outdoor');
 }
-const MUSCLES = [['chest', 'Chest'], ['triceps', 'Triceps'], ['biceps', 'Biceps'], ['legs', 'Legs'], ['back', 'Back'], ['shoulders', 'Shoulders']];
+const MUSCLES = [['chest', 'Chest'], ['triceps', 'Triceps'], ['biceps', 'Biceps'], ['legs', 'Legs'], ['back', 'Back'], ['shoulders', 'Shoulders'], ['abs', 'Abs']];
 const MNAME = Object.fromEntries(MUSCLES);
 const LIB = {
   chest: ['Flat barbell bench press', 'Incline barbell bench press', 'Decline barbell bench press', 'Flat dumbbell press', 'Incline dumbbell press', 'Decline dumbbell press', 'Dumbbell fly', 'Incline dumbbell fly', 'Cable crossover', 'Low-to-high cable fly', 'Machine chest press', 'Pec deck', 'Push-up', 'Chest dips', 'Landmine press', 'Svend press'],
@@ -322,12 +367,13 @@ const LIB = {
   back: ['Deadlift', 'Pull-up', 'Lat pulldown', 'Close-grip lat pulldown', 'Barbell row', 'Dumbbell row', 'Seated cable row', 'T-bar row', 'Chest-supported row', 'Straight-arm pulldown', 'Face pull', 'Back extension', 'Barbell shrug', 'Dumbbell shrug', 'Rack pull', 'Dead hang'],
   shoulders: ['Barbell overhead press', 'Dumbbell shoulder press', 'Arnold press', 'Machine shoulder press', 'Push press', 'Dumbbell lateral raise', 'Cable lateral raise', 'Front raise', 'Rear delt fly', 'Reverse pec deck', 'Upright row', 'Landmine press', 'Face pull', 'Barbell shrug']
 };
-const TIMED = new Set(['Wall sit', 'Dead hang']);
+LIB.abs = ['Crunch', 'Bicycle crunch', 'Reverse crunch', 'Cable crunch', 'Decline sit-up', 'Sit-up', 'V-up', 'Toe touch', 'Hanging knee raise', 'Hanging leg raise', 'Captain\'s chair leg raise', 'Lying leg raise', 'Flutter kicks', 'Scissor kicks', 'Russian twist', 'Weighted Russian twist', 'Woodchopper', 'Pallof press', 'Ab wheel rollout', 'Mountain climber', 'Heel touch', 'Dead bug', 'Bird dog', 'Plank', 'Side plank', 'Plank shoulder tap', 'Hollow hold', 'Machine ab crunch', 'Landmine twist'];
+const TIMED = new Set(['Wall sit', 'Dead hang', 'Plank', 'Side plank', 'Hollow hold']);
 const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (_) { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) { } };
 const lKey = n => `${n}-${S.user?.id}-${TD}`;
 // Lift planning is fresh every time. It is only restored while an indoor workout is actually running.
-const lAct = () => { const w = wInfo(wRow(S.user.id, TD, 'indoor')); return w.st === 'running' || w.st === 'paused'; };
+const lAct = () => { const w = wInfo(wRow(S.user.id, TD, 'indoor')); return w.st === 'running' || w.st === 'paused' || w.st === 'done'; };
 function lInit() {
   if (S.linit) return; S.linit = true;
   const sv = lAct() ? lsGet(lKey('lsess')) : null;
@@ -365,7 +411,11 @@ function liftPick(p) {
   }
   const chips = MUSCLES.map(([k, n]) => `<button data-msel="${k}" class="ctl ${sel.includes(k) ? 'on' : ''}">${n}</button>`).join('');
   const logged = (D.sets[p.id] || []).filter(r => r.day === TD).length;
-  return `<div class="card"><div class="lbl" style="margin-bottom:4px">What are we training?</div><p class="note" style="margin:0 0 4px">Pick one or more muscle groups.</p><div class="chips">${chips}</div>
+  const IT = [['Lift', 'Lifting'], ['Yoga', 'Yoga'], ['Pilates', 'Pilates'], ['Treadmill', 'Treadmill'], ['Cycling', 'Cycling'], ['HIIT', 'HIIT']];
+  const ty = S.wtype.indoor || 'Lift', lift = ty === 'Lift';
+  const typeQ = `<div class="lbl" style="margin-bottom:8px">What indoor workout are we going to target?</div><select data-wtype="indoor">${IT.map(([v, n]) => `<option value="${v}" ${v === ty ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
+  if (!lift) return `<div class="card">${typeQ}<div class="row" style="margin-top:14px"><button class="btn ctl" id="lgo2">Let's get after it!</button></div></div>`;
+  return `<div class="card">${typeQ}<div class="lbl" style="margin:18px 0 4px">What are we training?</div><p class="note" style="margin:0 0 4px">Pick one or more muscle groups.</p><div class="chips">${chips}</div>
     <div class="row" style="margin-top:6px"><button class="btn ctl" id="lsubmit" ${sel.length ? '' : 'disabled style="opacity:.45"'}>Next</button></div>
     ${lstep() === 'plan' ? planSection() : ''}
     ${logged ? `<p class="note" style="margin:10px 0 0">${logged} set${logged === 1 ? '' : 's'} logged today.</p>` : ''}</div>`;
@@ -409,7 +459,7 @@ function liftTile(p, key) {
 }
 function liftSession(p) {
   return `<div id="lifts" data-dragbox="lifts">${lKeys().map(k => liftTile(p, k)).join('')}</div>
-    <div class="row" style="margin:2px 0 14px"><button class="btn ghost sm" data-lplan="1">&lsaquo; Edit plan</button></div>`;
+    <div class="row" style="margin:2px 0 14px"><button class="btn ghost sm" data-lplan="1">&lsaquo; Modify/Add Workouts</button></div>`;
 }
 // ---- history page ----
 const e1rm = (w, r) => w * (1 + r / 30);
@@ -468,8 +518,9 @@ function startCountdown() {
   }, 1000);
 }
 function vWorkoutPage(k, p) {
+  let rowT;
   return header(k === 'indoor' ? '<em>Indoor</em>' : '<em>Outdoor</em>') + testBar(p) +
-    (S.hist && k === 'indoor' ? '' : `<div class="row" style="margin-bottom:14px"><button class="btn ghost sm" data-back="1">&lsaquo; Back to workouts</button></div>`) + (k === 'indoor' ? (p.id === S.me.id && lstep() === 'go' ? (S.hist ? liftHistory(p) : wCard(k, p) + liftSession(p)) : liftPick(p) + wCard(k, p)) : `<div class="card"><div class="lbl">${wLabel(k)} page</div><p style="margin:10px 0 0;font-size:15px">This is the ${k} workout page. Test text for now. More features are coming here.</p></div>` + wCard(k, p));
+    (S.hist && k === 'indoor' ? '' : `<div class="row" style="margin-bottom:14px"><button class="btn ghost sm" data-back="1">&lsaquo; Back to workouts</button></div>`) + (k === 'indoor' ? (p.id === S.me.id && (rowT = wRow(p.id, TD, 'indoor')) && wInfo(rowT).st !== 'idle' && rowT.type !== 'Lift' ? wCard(k, p) : p.id === S.me.id && lstep() === 'go' ? (S.hist ? liftHistory(p) : wCard(k, p) + liftSession(p)) : liftPick(p) + wCard(k, p)) : `<div class="card"><div class="lbl">${wLabel(k)} page</div><p style="margin:10px 0 0;font-size:15px">This is the ${k} workout page. Test text for now. More features are coming here.</p></div>` + wCard(k, p));
 }
 
 function vMeals() {
@@ -769,8 +820,27 @@ document.addEventListener('click', async e => {
   if (t.id === 'atoggle') { S.authMode = S.authMode === 'up' ? 'in' : 'up'; render(); return; }
   if (!S.me) return;
   if (d.tab) { S.tab = d.tab; S.sub = null; $('app').scrollTo(0, 0); render(); return; }
+  if (d.calview) { try { localStorage.setItem('calView', d.calview); } catch (_) { } render(); return; }
+  if (d.calday) { S.calSel = d.calday; render(); return; }
+  if (d.calstep) { S.calSel = addDays(S.calSel, +d.calstep); S.calMonth = S.calSel.slice(0, 7); render(); return; }
+  if (d.caltoday) { S.calSel = TD; S.calMonth = TD.slice(0, 7); render(); return; }
+  if (d.calmonth) { const [y, m] = S.calMonth.split('-').map(Number), n = new Date(y, m - 1 + (+d.calmonth), 1); S.calMonth = `${n.getFullYear()}-${pad(n.getMonth() + 1)}`; render(); return; }
+  if (d.calpick || d.caladd) {
+    if (!editable()) return;
+    const cur = planOf(u, S.calSel).slice(); let name = d.calpick;
+    if (d.caladd) { const inp = $('calcustom'); name = inp ? inp.value.trim() : ''; if (!name) { toast('Type a workout first.'); return; } if (!cur.includes(name)) cur.push(name); saveDayPlan(u, S.calSel, cur); return; }
+    const i = cur.indexOf(name); if (i >= 0) cur.splice(i, 1); else cur.push(name);
+    saveDayPlan(u, S.calSel, cur); return;
+  }
   if (d.msel) { const sel = lsel(), i = sel.indexOf(d.msel); if (i >= 0) sel.splice(i, 1); else sel.push(d.msel); lSave(); render(); return; }
   if (t.id === 'lsubmit') { if (!lsel().length) return; setLstep('plan'); render(); return; }
+  if (t.id === 'lgo2') {
+    if (!editable()) return;
+    const o = wInfo(wRow(u, TD, 'outdoor'));
+    if (o.st === 'running' || o.st === 'paused') { toast('Finish your outdoor workout first.'); return; }
+    if (wInfo(wRow(u, TD, 'indoor')).st === 'idle') startCountdown();
+    return;
+  }
   if (t.id === 'lgo') {
     if (!editable() || !lsel().length) return;
     const w = wInfo(wRow(u, TD, 'indoor')), o = wInfo(wRow(u, TD, 'outdoor'));
@@ -828,7 +898,7 @@ document.addEventListener('click', async e => {
     const stopAt = +new Date(row.paused_at || row.done_at), el = stopAt - +new Date(row.started_at) - (row.paused_ms || 0);
     if (el >= WLEN - 1000) {
       if (!confirm('Undo this workout? It ran the full 45 minutes, so it goes back to Not started.')) return;
-      delete D.workouts[u + '|' + TD + '|' + k]; render();
+      delete D.workouts[u + '|' + TD + '|' + k]; if (k === 'indoor') { S.linit = false; lsSet(lKey('lsess'), null); } render();
       const { error } = await sb.from('workouts').delete().match({ user_id: u, day: TD, kind: k }); if (error) { toast(error.message); await loadAll(); render(); }
     } else {
       if (!confirm('Undo? Your workout reopens paused right where you left off.')) return;
@@ -862,9 +932,12 @@ document.addEventListener('click', async e => {
     if (!(sets >= 1 && sets <= 20)) { toast('Sets must be 1 to 20.'); return; }
     const base = todaySets(u, name).length;
     const rows = Array.from({ length: sets }, (_, k) => ({ day: TD, muscle: m, exercise: name, set_no: base + k + 1, reps, weight, seconds: secs > 0 ? secs : null }));
-    const { error } = await sb.from('lift_sets').insert(rows);
-    if (error) { toast(error.message); return; }
+    D.sets[u] = [...(D.sets[u] || []), ...rows.map((r, k) => ({ ...r, id: 'tmp' + Date.now() + k, user_id: u }))];
     if (S.ldone) { delete S.ldone[key]; lSave(); }
+    (S.shut ||= {})[key] = false; render();
+    toast(`Logged ${sets > 1 ? sets + ' sets' : 'set ' + (base + 1)}: ${fmtSet(rows[0]).replace(/&middot;/g, '-')}`);
+    const { error } = await sb.from('lift_sets').insert(rows);
+    if (error) { toast(error.message); }
     await loadAll(); render(); return;
   }
   const today = TD;
@@ -910,7 +983,7 @@ document.addEventListener('click', async e => {
 });
 document.addEventListener('change', async e => {
   const t = e.target;
-  if (t.dataset.wtype) { S.wtype[t.dataset.wtype] = t.value; return; }
+  if (t.dataset.wtype) { S.wtype[t.dataset.wtype] = t.value; if (t.dataset.wtype === 'indoor') render(); return; }
   if (t.id === 'lpick') { const n = $('lname'); if (t.value === '__custom') { n.style.display = ''; n.value = ''; n.focus(); } else { n.style.display = 'none'; n.value = t.value; } return; }
   if (t.id === 'ph' && t.files[0]) uploadPhoto(t.files[0], TD);
   if (t.id === 'phOld' && t.files[0]) {
