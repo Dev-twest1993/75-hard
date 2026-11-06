@@ -33,10 +33,10 @@ body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;ba
   radial-gradient(560px 400px at 108% 108%,rgba(20,110,120,.18),transparent 65%)}
 *{scrollbar-width:none}
 ::-webkit-scrollbar{display:none;width:0;height:0}
-#app{position:fixed;top:0;bottom:0;left:0;right:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:none;touch-action:pan-y;-webkit-overflow-scrolling:touch;max-width:430px;margin:0 auto;box-sizing:border-box;padding:calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 96px)}
+#app{position:fixed;top:0;bottom:0;left:0;right:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:none;touch-action:pan-y;-webkit-overflow-scrolling:touch;max-width:430px;margin:0 auto;box-sizing:border-box;padding:calc(var(--top, env(safe-area-inset-top)) + 18px) 16px calc(env(safe-area-inset-bottom) + 96px)}
 .top{margin-bottom:12px}
 .hello{font-size:12px;color:var(--dim);letter-spacing:.14em;text-transform:uppercase;font-weight:600}
-h1{padding:2px .25em .1em 0;margin:4px 0 0;font-family:var(--serif);font-style:italic;font-weight:400;font-size:36px;color:var(--text);line-height:1.18;overflow:visible}
+h1{padding:6px .25em .1em 0;margin:2px 0 0;font-family:var(--serif);font-style:italic;font-weight:400;font-size:36px;color:var(--text);line-height:1.18;overflow:visible}
 h1 em{color:var(--acc);padding-right:.15em}
 .seg{display:flex;background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:999px;padding:3px;margin-bottom:16px}
 .seg button{flex:1;background:none;border:0;color:var(--dim);font-size:13px;padding:9px 0;border-radius:999px;font-weight:600;letter-spacing:.02em}
@@ -58,8 +58,12 @@ svg .glow{filter:drop-shadow(0 0 6px currentColor)}
 .btn.blue{background:#4fa8ff;color:#04121f;box-shadow:0 6px 22px rgba(79,168,255,.28)}
 .btn.violet{background:rgba(167,139,250,.16);color:#d9ccff;border:1px solid rgba(167,139,250,.5);box-shadow:none}
 .btn[disabled]{pointer-events:none}
-.lbtns{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+.lbtns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0 4px}
+.lbtns .btn{width:100%;padding:12px 8px;text-align:center;font-size:14px;white-space:nowrap}
 .hpt{cursor:pointer}
+svg[role=img]{display:block;width:100%;max-width:100%;height:auto}
+#app>*{max-width:100%;min-width:0;box-sizing:border-box}
+#app .card{min-width:0}
 .lgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}.lgrid.two{grid-template-columns:repeat(2,1fr)}
 .fld{display:flex;flex-direction:column;gap:4px;min-width:0}.fld span{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-weight:600}
 .fld input{width:100%;min-width:0;box-sizing:border-box}
@@ -134,6 +138,7 @@ input[type=range]{width:100%;accent-color:#2fd98f;margin-top:12px}
 .chips button{background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--dim);border-radius:999px;padding:7px 12px;font-size:12px;font-weight:600}
 .chips button.on{background:rgba(47,217,143,.18);border-color:rgba(47,217,143,.5);color:var(--text)}
 .note{font-size:12px;color:var(--dim);line-height:1.55}
+.statgrid>*{min-width:0}
 .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .tile{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:18px;padding:14px}
 .tile b{display:block;font-size:30px;margin-top:6px;font-variant-numeric:tabular-nums;letter-spacing:-.5px}

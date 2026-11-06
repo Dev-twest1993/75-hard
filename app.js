@@ -400,8 +400,7 @@ function liftTile(p, key) {
       <div class="lbtns"><button class="btn sm ctl" data-logset="1">Log set</button><button class="btn sm amber ctl" data-lundo="1" ${done.length ? '' : 'disabled style="opacity:.4"'}>Undo</button><button class="btn sm blue ctl" data-lcomp="1">Complete</button><button class="btn sm violet ctl" data-lhist="1">Historical lifts</button></div>` : ''}</div>`;
 }
 function liftSession(p) {
-  return `<div class="card"><div class="lbl">Your workout</div><p class="note" style="margin:6px 0 0">Log weight, reps, sets and time for each lift. Drag a lift by its dots to reorder. Leave time blank for normal lifts.</p></div>
-    <div id="lifts" data-dragbox="lifts">${lKeys().map(k => liftTile(p, k)).join('')}</div>
+  return `<div id="lifts" data-dragbox="lifts">${lKeys().map(k => liftTile(p, k)).join('')}</div>
     <div class="row" style="margin:2px 0 14px"><button class="btn ghost sm" data-lplan="1">&lsaquo; Edit plan</button></div>`;
 }
 // ---- history page ----
@@ -829,7 +828,7 @@ document.addEventListener('click', async e => {
     (S.ldone ||= {})[key] = true; (S.shut ||= {})[key] = true;
     const next = [...keys.slice(i + 1), ...keys.slice(0, i)].find(k => !S.ldone[k]);
     if (next) S.shut[next] = false; lSave(); render();
-    if (next) { const el = [...document.querySelectorAll('.lift')].find(x => x.dataset.lb === next); if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); }
+    if (next) { const el = [...document.querySelectorAll('.lift')].find(x => x.dataset.lb === next); if (el) setTimeout(() => { const a = $('app'); a.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top - a.getBoundingClientRect().top + a.scrollTop - 14), left: 0, behavior: 'smooth' }); }, 60); }
     else toast('Every lift is done. Nice work!');
     return;
   }
@@ -932,6 +931,16 @@ setInterval(() => {
 
 // ---------- start ----------
 if (new URLSearchParams(location.search).get('celebrate')) { history.replaceState(null, '', location.pathname); setTimeout(water128, 1200); }
+// Some iPhones draw the page under the status bar without reporting a safe-area inset. Add the missing space.
+function fitTop() {
+  const pr = document.createElement('div'); pr.style.cssText = 'position:fixed;top:0;left:0;padding-top:env(safe-area-inset-top)'; document.body.appendChild(pr);
+  const env = pr.getBoundingClientRect().height; pr.remove();
+  const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+  const full = innerHeight >= screen.height - 2;
+  document.documentElement.style.setProperty('--top', (env > 0 ? env : (standalone && full ? 47 : 0)) + 'px');
+}
+$('app').addEventListener('scroll', () => { const a = $('app'); if (a.scrollLeft) a.scrollLeft = 0; });   // never let the page drift sideways
+fitTop(); addEventListener('resize', fitTop); addEventListener('orientationchange', fitTop);
 if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.celebrate) water128(); });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then(pushCheck).catch(() => { PUSH.st = 'unsupported'; });
 (async () => {
