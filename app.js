@@ -392,7 +392,10 @@ function lastSummary(rows) {   // just the headline number from the previous ses
 function liftTile(p, key) {
   const i = key.indexOf('|'), m = key.slice(0, i), n = key.slice(i + 1);
   const done = todaySets(p.id, n), lt = lastTime(p.id, n), seed = done[done.length - 1] || (lt && lt.rows[0]) || {}, open = !(S.shut || {})[key], fin = (S.ldone || {})[key];
-  const wv = seed.weight != null && +seed.weight > 0 ? +seed.weight : '', rv = seed.reps ?? '';
+  // Defaults: today's last set once you have logged one, otherwise the top set from last time. Sets box = sets still to go.
+  const top = lt ? lt.rows.slice().sort((a, b) => (+b.weight || 0) - (+a.weight || 0) || a.set_no - b.set_no)[0] : null, src = done[done.length - 1] || top || {};
+  const wv = src.weight != null && +src.weight > 0 ? +src.weight : '', rv = src.reps ?? '', tsec = src.seconds || 0;
+  const sv = Math.max(1, (lt ? lt.rows.length : 1) - done.length), mv = tsec ? Math.floor(tsec / 60) : '', tv = tsec ? tsec % 60 : '';
   const sum = fin ? 'Done' : done.length ? `${done.length} set${done.length === 1 ? '' : 's'}` : 'No sets yet';
   const fld = (cls, label, ph, val, extra = '') => `<label class="fld"><span>${label}</span><input type="number" class="ctl ${cls}" inputmode="${cls === 'lw' ? 'decimal' : 'numeric'}" min="0" ${extra} placeholder="${ph}" value="${val}"></label>`;
   const rows = done.map(r => `<div class="row" style="border-top:1px solid var(--line);padding:8px 0"><span class="badge">Set ${r.set_no}</span><span style="flex:1;font-size:15px">${fmtSet(r)}</span></div>`).join('');
@@ -400,8 +403,8 @@ function liftTile(p, key) {
     <button class="ctl" data-ltoggle="${esc(key)}" style="display:block;width:100%;background:none;border:0;color:var(--text);font:inherit;padding:0 44px 0 0;text-align:left"><div class="lbl" style="color:var(--acc)">${MNAME[m]}</div>
       <div class="row" style="margin-top:6px;gap:10px"><b style="flex:1;font-size:17px">${esc(n)}</b><span class="badge ${fin ? 'good' : ''}">${fin ? tick + ' ' : ''}${sum}</span><svg width="14" height="14" viewBox="0 0 14 14" style="transform:rotate(${open ? 180 : 0}deg);opacity:.5;flex:none"><path d="M2 5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div></button>
     ${open ? `${lt ? `<p class="note" style="margin:8px 0 0">Last time (${pretty(lt.day)}): ${lastSummary(lt.rows)}</p>` : ''}<div style="margin-top:8px">${rows}</div>
-      <div class="lgrid">${fld('lw', 'Weight (lb)', 'lb', wv, 'step="0.5"')}${fld('lr', 'Reps', 'reps', rv)}${fld('ls', 'Sets', '1', 1, 'max="20"')}</div>
-      <div class="lgrid two">${fld('lm', 'Time min', 'min', '')}${fld('lt', 'Time sec', 'sec', '', 'max="59"')}</div>
+      <div class="lgrid">${fld('lw', 'Weight (lb)', 'lb', wv, 'step="0.5"')}${fld('lr', 'Reps', 'reps', rv)}${fld('ls', 'Sets', '1', sv, 'max="20"')}</div>
+      <div class="lgrid two">${fld('lm', 'Time min', 'min', mv)}${fld('lt', 'Time sec', 'sec', tv, 'max="59"')}</div>
       <div class="lbtns"><button class="btn sm ctl" data-logset="1">Log set</button><button class="btn sm amber ctl" data-lundo="1" ${done.length ? '' : 'disabled style="opacity:.4"'}>Undo</button><button class="btn sm blue ctl" data-lcomp="1">Complete</button><button class="btn sm violet ctl" data-lhist="1">Historical lifts</button></div>` : ''}</div>`;
 }
 function liftSession(p) {
