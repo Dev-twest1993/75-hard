@@ -289,7 +289,7 @@ function wCard(k, p) {
   const types = k === 'indoor' ? ['Lift', 'Yoga', 'Pilates', 'Treadmill', 'Cycling', 'HIIT'] : ['Walk', 'Run', 'Hike', 'Bike ride', 'Sports'];
   const row = wRow(p.id, TD, k);
   let body = '';
-  if (w.st === 'done') body = `<div class="timer">Done</div><div class="note">${esc(row.type)} &middot; 45 min complete</div>`;
+  if (w.st === 'done') body = `<div class="timer">Done</div><div class="note">${esc(row.type)} &middot; 45 min complete</div>${p.id === S.me.id ? `<div class="row" style="margin-top:12px"><button class="btn amber sm" data-wundo="${k}">Undo</button></div>` : ''}`;
   else if (w.st === 'running' || w.st === 'paused') {
     const ps = w.st === 'paused', mine = p.id === S.me.id;
     body = `<div class="timer" id="t-${k}">${mmss(w.left)}</div><div class="note">${esc(row.type)} ${ps ? 'is paused. The clock is stopped.' : 'in progress. It closes on its own at 45 minutes.'}</div>` +
@@ -308,7 +308,7 @@ function vWorkouts() {
   const tile = k => {
     const row = wRow(p.id, TD, k), w = wInfo(row);
     const st = w.st === 'done' ? `Done &middot; ${esc(row.type)}` : w.st === 'running' ? `${mmss(w.left)} left &middot; ${esc(row.type)}` : w.st === 'paused' ? `Paused &middot; ${mmss(w.left)} left` : 'Not started';
-    return `<button class="card wtile" data-open="${k}"><div class="row sp"><div><div class="lbl">${wLabel(k)}</div><div id="ws-${k}" style="margin-top:6px;font-size:15px">${st}</div></div><div class="row" style="gap:12px">${ring(54, 7, w.frac, COLORS[k])}<svg width="10" height="16" viewBox="0 0 10 16"><path d="M2 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/></svg></div></div></button>`;
+    return `<div class="card wtile" data-open="${k}" role="button" tabindex="0"><div class="row sp"><div><div class="lbl">${wLabel(k)}</div><div id="ws-${k}" style="margin-top:6px;font-size:15px">${st}</div>${w.st === 'done' && p.id === S.me.id ? `<div style="margin-top:10px"><button class="btn amber sm" data-wundo="${k}">Undo</button></div>` : ''}</div><div class="row" style="gap:12px">${ring(54, 7, w.frac, COLORS[k])}<svg width="10" height="16" viewBox="0 0 10 16"><path d="M2 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/></svg></div></div></div>`;
   };
   return header('Work<em>outs</em>') + testBar(p) + `<p class="note" style="margin-top:-4px">Tap a workout to open it.</p>` + tile('indoor') + tile('outdoor');
 }
@@ -758,7 +758,7 @@ document.addEventListener('submit', async e => {
 });
 document.addEventListener('click', e => { const pt = e.target.closest && e.target.closest('.hpt'); if (pt && S._hp) { const n = $('hnote'); if (n) n.textContent = S._hp[+pt.dataset.hi]; } });
 document.addEventListener('click', async e => {
-  const t = e.target.closest('button,label'); if (!t) return; const d = t.dataset;
+  const t = e.target.closest('button,label,[data-open]'); if (!t) return; const d = t.dataset;
   const u = S.user?.id, v = S.me && viewed();
   if (t.id === 'pushOn') return pushEnable();
   if (t.id === 'pushOff') return pushDisable();
@@ -820,6 +820,19 @@ document.addEventListener('click', async e => {
   }
   if (!editable()) return;
   if (d.lsdel) { D.sets[u] = (D.sets[u] || []).filter(x => x.id !== d.lsdel); render(); const { error } = await sb.from('lift_sets').delete().eq('id', d.lsdel); if (error) { toast(error.message); await loadAll(); render(); } return; }
+  if (d.wundo) {
+    const k = d.wundo, row = wRow(u, TD, k); if (!row || !row.done_at) return;
+    const stopAt = +new Date(row.paused_at || row.done_at), el = stopAt - +new Date(row.started_at) - (row.paused_ms || 0);
+    if (el >= WLEN - 1000) {
+      if (!confirm('Undo this workout? It ran the full 45 minutes, so it goes back to Not started.')) return;
+      delete D.workouts[u + '|' + TD + '|' + k]; render();
+      const { error } = await sb.from('workouts').delete().match({ user_id: u, day: TD, kind: k }); if (error) { toast(error.message); await loadAll(); render(); }
+    } else {
+      if (!confirm('Undo? Your workout reopens paused right where you left off.')) return;
+      saveWorkout({ ...row, done_at: null, paused_at: row.paused_at || row.done_at });
+    }
+    return;
+  }
   if (d.lundo) {
     const key = t.closest('.lift').dataset.lb, name = key.slice(key.indexOf('|') + 1), rows = todaySets(u, name), last = rows[rows.length - 1];
     if (!last) return;
