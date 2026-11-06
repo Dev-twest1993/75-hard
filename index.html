@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -31,6 +31,7 @@ body{background:var(--bg);width:100%;position:fixed;inset:0;touch-action:pan-y}
 body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:
   radial-gradient(900px 520px at 50% 120%,rgba(16,120,76,.38),transparent 70%),
   radial-gradient(560px 400px at 108% 108%,rgba(20,110,120,.18),transparent 65%)}
+input,select,textarea{font-size:16px !important}
 *{scrollbar-width:none}
 ::-webkit-scrollbar{display:none;width:0;height:0}
 #app{position:fixed;top:0;bottom:0;left:0;right:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:none;touch-action:pan-y;-webkit-overflow-scrolling:touch;max-width:430px;margin:0 auto;box-sizing:border-box;padding:calc(var(--top, env(safe-area-inset-top)) + 18px) 16px calc(env(safe-area-inset-bottom) + 96px)}
@@ -67,7 +68,7 @@ svg .glow{filter:drop-shadow(0 0 6px currentColor)}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
 .seg button{background:none;border:0;color:var(--dim);padding:6px 12px;font-size:12px;font-weight:700}
 .seg button.on{background:rgba(47,217,143,.2);color:var(--text)}
-.btn.violet{background:rgba(167,139,250,.16);color:#d9ccff;border:1px solid rgba(167,139,250,.5);box-shadow:none}
+.btn.violet{background:#a78bfa;color:#140b2e;border:0;box-shadow:0 6px 22px rgba(167,139,250,.28)}
 .btn[disabled]{pointer-events:none}
 .lbtns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0 4px}
 .lbtns .btn{width:100%;padding:12px 8px;text-align:center;font-size:14px;white-space:nowrap}

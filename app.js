@@ -49,11 +49,21 @@ function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add
 async function must(p) { const r = await p; if (r.error) { toast(r.error.message); throw r.error; } return r.data; }
 
 // ---------- data ----------
+// The database hands back at most 1000 rows per request, so fetch the lift log in pages.
+async function allSets() {
+  let out = [];
+  for (let from = 0; ; from += 1000) {
+    const r = await sb.from('lift_sets').select('*').order('created_at').order('id').range(from, from + 999);
+    if (r.error) return r;
+    out = out.concat(r.data); if (r.data.length < 1000) break;
+  }
+  return { data: out, error: null };
+}
 async function loadAll() {
   const [p, d, w, b, wi, g, m, lf, wp] = await Promise.all([
     sb.from('profiles').select('*'), sb.from('daily').select('*'), sb.from('workouts').select('*'),
     sb.from('books').select('*').order('created_at'), sb.from('weigh_ins').select('*').order('day_num'),
-    sb.from('groceries').select('*').order('created_at'), sb.from('meal_plan').select('*'), sb.from('lift_sets').select('*').order('created_at'), sb.from('workout_plans').select('*')
+    sb.from('groceries').select('*').order('created_at'), sb.from('meal_plan').select('*'), allSets(), sb.from('workout_plans').select('*')
   ]);
   for (const r of [p, d, w, b, wi, g, m, lf, wp]) if (r.error) { toast(r.error.message); return; }
   D.profiles = p.data;
@@ -319,7 +329,12 @@ function calTile(v) {
       ? `<div style="margin:10px 0 0;font-size:20px;font-weight:700;line-height:1.3">${esc(saved.join(' + '))}</div>${ed ? '<div class="row" style="margin-top:12px"><button class="btn ghost sm ctl" data-caledit="1">Change plan</button></div>' : ''}`
       : '<p class="note" style="margin:8px 0 0">Nothing planned.</p>';
   const planner = `<div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">${head}${body}</div>`;
-  return `<div class="card dtile" data-tile="cal">${GRIP}<div class="row sp" style="padding-right:44px;margin-bottom:12px"><div class="lbl">Calendar</div><div class="seg">${seg('day', 'Day')}${seg('month', 'Month')}</div></div>${main}${planner}</div>`;
+  let go = '';
+  if (ed && sel === TD) {
+    const w = wInfo(wRow(v.id, TD, 'indoor'));
+    go = `<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">${w.st === 'idle' ? liftPick(v, true) : `<div class="lbl">Today's workout</div><p class="note" style="margin:6px 0 10px">Your indoor workout is ${w.st === 'done' ? 'done' : 'in progress'}.</p><button class="btn ctl" data-calopen="1">Open workout</button>`}</div>`;
+  }
+  return `<div class="card dtile" data-tile="cal">${GRIP}<div class="row sp" style="padding-right:44px;margin-bottom:12px"><div class="lbl">Calendar</div><div class="seg">${seg('day', 'Day')}${seg('month', 'Month')}</div></div>${main}${planner}${go}</div>`;
 }
 async function saveDayPlan(u, day, items) {
   if (items.length) D.plans[u + '|' + day] = items; else delete D.plans[u + '|' + day];
@@ -345,7 +360,7 @@ function wCard(k, p) {
   else if (w.st === 'running' || w.st === 'paused') {
     const ps = w.st === 'paused', mine = p.id === S.me.id;
     body = `<div class="timer" id="t-${k}">${mmss(w.left)}</div><div class="note">${esc(row.type)} ${ps ? 'is paused. The clock is stopped.' : 'in progress. It closes on its own at 45 minutes.'}</div>` +
-      (mine ? `<div class="lbtns"><button class="btn sm amber" data-${ps ? 'resume' : 'pause'}="${k}">${ps ? 'Resume' : 'Pause'}</button><button class="btn sm blue" data-restart="${k}">Restart</button><button class="btn sm red" data-stop="${k}">Stop</button><button class="btn sm" data-fin="${k}">Complete Workout</button></div>` : '');
+      (mine ? `<div class="lbtns"><button class="btn sm amber" data-${ps ? 'resume' : 'pause'}="${k}">${ps ? 'Resume' : 'Pause'}</button><button class="btn sm blue" data-restart="${k}">Restart Counter</button>${k === 'indoor' ? '<button class="btn sm violet" data-lplan="1">Modify/Add Workouts</button>' : `<button class="btn sm red" data-stop="${k}">Stop</button>`}<button class="btn sm" data-fin="${k}">Complete Workout</button></div>` : '');
   }
   else if (other.st === 'running' || other.st === 'paused') body = `<div class="note">Finish your other workout first.</div>`;
   else body = `<select data-wtype="${k}">${types.map(t => `<option ${t === (S.wtype[k] || types[0]) ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="row" style="margin-top:14px"><button class="btn" data-start="${k}">Start 45 min</button></div>`;
@@ -423,7 +438,8 @@ function syncType(ty) {
   if (ty === 'Lift') S.lsel = S.lsel.filter(m => LMUS.includes(m));
   else if (S.lsel.length !== 1 || S.lsel[0] !== key) { S.lsel = [key]; if (S.lstep === 'pick') S.lstep = 'plan'; }
 }
-function liftPick(p) {
+function liftPick(p, bare) {
+  const W = h => bare ? h : `<div class="card">${h}</div>`;
   const sel = lsel(), mine = p.id === S.me.id;
   if (!mine) {
     const rows = (D.sets[p.id] || []).filter(r => r.day === TD);
@@ -438,11 +454,11 @@ function liftPick(p) {
   const ty = busy && IT.some(x => x[0] === live.type) ? live.type : (S.wtype.indoor || 'Lift'), lift = ty === 'Lift';
   S.wtype.indoor = ty; syncType(ty);
   const typeQ = `<div class="lbl" style="margin-bottom:8px">What indoor workout are we going to target?</div><select data-wtype="indoor" ${busy ? 'disabled' : ''}>${IT.map(([v, n]) => `<option value="${v}" ${v === ty ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
-  if (!lift) return `<div class="card">${typeQ}${planSection()}</div>`;
-  return `<div class="card">${typeQ}<div class="lbl" style="margin:18px 0 4px">What are we training?</div><p class="note" style="margin:0 0 4px">Pick one or more muscle groups.</p><div class="chips">${chips}</div>
+  if (!lift) return W(`${typeQ}${planSection()}`);
+  return W(`${typeQ}<div class="lbl" style="margin:18px 0 4px">What are we training?</div><p class="note" style="margin:0 0 4px">Pick one or more muscle groups.</p><div class="chips">${chips}</div>
     <div class="row" style="margin-top:6px"><button class="btn ctl" id="lsubmit" ${sel.length ? '' : 'disabled style="opacity:.45"'}>Next</button></div>
     ${lstep() === 'plan' ? planSection() : ''}
-    ${logged ? `<p class="note" style="margin:10px 0 0">${logged} set${logged === 1 ? '' : 's'} logged today.</p>` : ''}</div>`;
+    ${logged ? `<p class="note" style="margin:10px 0 0">${logged} set${logged === 1 ? '' : 's'} logged today.</p>` : ''}`);
 }
 function planSection() {
   const plan = lplan(), sel = lsel();
@@ -479,7 +495,7 @@ function liftTile(p, key) {
     ${open ? `${lt ? `<p class="note" style="margin:8px 0 0">Last time (${pretty(lt.day)}): ${lastSummary(lt.rows)}</p>` : ''}<div style="margin-top:8px">${rows}</div>
       <div class="lgrid">${fld('lw', 'Weight (lb)', 'lb', wv, 'step="0.5"')}${fld('lr', 'Reps', 'reps', rv)}${fld('ls', 'Sets', '1', sv, 'max="20"')}</div>
       <div class="lgrid two">${fld('lm', 'Time min', 'min', mv)}${fld('lt', 'Time sec', 'sec', tv, 'max="59"')}</div>
-      <div class="lbtns"><button class="btn sm ctl" data-logset="1">Log set</button><button class="btn sm amber ctl" data-lundo="1" ${done.length ? '' : 'disabled style="opacity:.4"'}>Undo</button><button class="btn sm blue ctl" data-lcomp="1">Complete</button><button class="btn sm violet ctl" data-lhist="1">Historical lifts</button></div>` : ''}</div>`;
+      <div class="lbtns"><button class="btn sm ctl" data-logset="1">Log set</button><button class="btn sm amber ctl" data-lundo="1">Undo</button><button class="btn sm blue ctl" data-lcomp="1">Complete</button><button class="btn sm violet ctl" data-lhist="1">Historical lifts</button></div>` : ''}</div>`;
 }
 function liftSession(p) {
   return `<div id="lifts" data-dragbox="lifts">${lKeys().map(k => liftTile(p, k)).join('')}</div>
@@ -843,6 +859,7 @@ document.addEventListener('click', async e => {
   if (t.id === 'atoggle') { S.authMode = S.authMode === 'up' ? 'in' : 'up'; render(); return; }
   if (!S.me) return;
   if (d.tab) { S.tab = d.tab; S.sub = null; $('app').scrollTo(0, 0); render(); return; }
+  if (d.calopen) { S.tab = 'workouts'; S.sub = 'indoor'; $('app').scrollTo(0, 0); render(); return; }
   if (d.calview) { try { localStorage.setItem('calView2', d.calview); } catch (_) { } render(); return; }
   if (d.calday) { S.calSel = d.calday; render(); return; }
   if (d.calstep) { S.calSel = addDays(S.calSel, +d.calstep); S.calMonth = S.calSel.slice(0, 7); render(); return; }
@@ -864,6 +881,7 @@ document.addEventListener('click', async e => {
     if (!editable() || !lsel().length) return;
     const w = wInfo(wRow(u, TD, 'indoor')), o = wInfo(wRow(u, TD, 'outdoor'));
     if (o.st === 'running' || o.st === 'paused') { toast('Finish your outdoor workout first.'); return; }
+    if (S.tab !== 'workouts') { S.tab = 'workouts'; S.sub = 'indoor'; }
     setLstep('go'); $('app').scrollTo(0, 0); render();
     if (w.st === 'idle') startCountdown();
     return;
@@ -941,7 +959,7 @@ document.addEventListener('click', async e => {
   }
   if (d.lundo) {
     const key = t.closest('.lift').dataset.lb, name = key.slice(key.indexOf('|') + 1), rows = todaySets(u, name), last = rows[rows.length - 1];
-    if (!last) return;
+    if (!last) { toast('No sets logged yet to undo.'); return; }
     D.sets[u] = D.sets[u].filter(x => x.id !== last.id); render();
     const { error } = await sb.from('lift_sets').delete().eq('id', last.id);
     if (error) { toast(error.message); await loadAll(); render(); } else toast(`Removed set ${last.set_no}.`);
@@ -1074,3 +1092,10 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').then
   const { data } = await sb.auth.getSession();
   if (data.session) await afterLogin(data.session); else render();
 })();
+
+// If iOS ever zooms or pans the page (e.g. after focusing a field), snap it back.
+if (window.visualViewport) {
+  const snap = () => { const v = window.visualViewport; if (v.scale > 1.01 || Math.abs(v.offsetLeft) > 1) { scrollTo(0, 0); document.documentElement.scrollLeft = 0; document.body.scrollLeft = 0; } };
+  visualViewport.addEventListener('resize', snap); visualViewport.addEventListener('scroll', snap);
+}
+addEventListener('scroll', () => { if (scrollX) scrollTo(0, 0); });
