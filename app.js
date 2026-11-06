@@ -384,6 +384,11 @@ function planSection() {
     ${sel.map(block).join('')}
     <div class="row" style="margin-top:18px"><button class="btn ctl" id="lgo" ${total ? '' : 'disabled style="opacity:.45"'}>Let's get after it!</button></div></div>`;
 }
+function lastSummary(rows) {   // just the headline number from the previous session
+  const w = Math.max(0, ...rows.map(r => +r.weight || 0)); if (w > 0) return `${w} lb`;
+  const t = Math.max(0, ...rows.map(r => r.seconds || 0)); if (t > 0) return fmtTime(t);
+  return `${Math.max(0, ...rows.map(r => r.reps || 0))} reps`;
+}
 function liftTile(p, key) {
   const i = key.indexOf('|'), m = key.slice(0, i), n = key.slice(i + 1);
   const done = todaySets(p.id, n), lt = lastTime(p.id, n), seed = done[done.length - 1] || (lt && lt.rows[0]) || {}, open = !(S.shut || {})[key], fin = (S.ldone || {})[key];
@@ -394,7 +399,7 @@ function liftTile(p, key) {
   return `<div class="card dtile lift" data-lb="${esc(key)}" style="padding-bottom:${open ? 14 : 18}px">${GRIP}
     <button class="ctl" data-ltoggle="${esc(key)}" style="display:block;width:100%;background:none;border:0;color:var(--text);font:inherit;padding:0 44px 0 0;text-align:left"><div class="lbl" style="color:var(--acc)">${MNAME[m]}</div>
       <div class="row" style="margin-top:6px;gap:10px"><b style="flex:1;font-size:17px">${esc(n)}</b><span class="badge ${fin ? 'good' : ''}">${fin ? tick + ' ' : ''}${sum}</span><svg width="14" height="14" viewBox="0 0 14 14" style="transform:rotate(${open ? 180 : 0}deg);opacity:.5;flex:none"><path d="M2 5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div></button>
-    ${open ? `${lt ? `<p class="note" style="margin:8px 0 0">Last time (${pretty(lt.day)}): ${lt.rows.map(fmtSet).join(' &middot; ')}</p>` : ''}<div style="margin-top:8px">${rows}</div>
+    ${open ? `${lt ? `<p class="note" style="margin:8px 0 0">Last time (${pretty(lt.day)}): ${lastSummary(lt.rows)}</p>` : ''}<div style="margin-top:8px">${rows}</div>
       <div class="lgrid">${fld('lw', 'Weight (lb)', 'lb', wv, 'step="0.5"')}${fld('lr', 'Reps', 'reps', rv)}${fld('ls', 'Sets', '1', 1, 'max="20"')}</div>
       <div class="lgrid two">${fld('lm', 'Time min', 'min', '')}${fld('lt', 'Time sec', 'sec', '', 'max="59"')}</div>
       <div class="lbtns"><button class="btn sm ctl" data-logset="1">Log set</button><button class="btn sm amber ctl" data-lundo="1" ${done.length ? '' : 'disabled style="opacity:.4"'}>Undo</button><button class="btn sm blue ctl" data-lcomp="1">Complete</button><button class="btn sm violet ctl" data-lhist="1">Historical lifts</button></div>` : ''}</div>`;
