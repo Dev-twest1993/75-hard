@@ -300,7 +300,7 @@ const CAL_OPTS = ['Chest', 'Triceps', 'Biceps', 'Legs', 'Back', 'Shoulders', 'Ab
 const planOf = (u, day) => D.plans[u + '|' + day] || [];
 function calTile(v) {
   if (S.calTD !== TD) { S.calTD = TD; S.calSel = TD; S.calMonth = TD.slice(0, 7); }
-  let view = 'day'; try { view = localStorage.getItem('calView2') || 'day'; } catch (_) { }
+  const view = S.calView || 'day';
   const sel = S.calSel, ed = editable() && v.id === S.me.id, saved = planOf(v.id, sel), editing = ed && (S.calEditing === sel || !saved.length);
   if (S.calDraftDay !== sel || !editing) { S.calDraftDay = sel; if (!editing) S.calDraft = saved.slice(); else if (S.calDraftFor !== sel) S.calDraft = saved.slice(); }
   S.calDraftFor = editing ? sel : null;
@@ -360,7 +360,7 @@ function wCard(k, p) {
   else if (w.st === 'running' || w.st === 'paused') {
     const ps = w.st === 'paused', mine = p.id === S.me.id;
     body = `<div class="timer" id="t-${k}">${mmss(w.left)}</div><div class="note">${esc(row.type)} ${ps ? 'is paused. The clock is stopped.' : 'in progress. It closes on its own at 45 minutes.'}</div>` +
-      (mine ? `<div class="lbtns"><button class="btn sm amber" data-${ps ? 'resume' : 'pause'}="${k}">${ps ? 'Resume' : 'Pause'}</button><button class="btn sm blue" data-restart="${k}">Restart Counter</button>${k === 'indoor' ? '<button class="btn sm violet" data-lplan="1">Modify/Add Workouts</button>' : `<button class="btn sm red" data-stop="${k}">Stop</button>`}<button class="btn sm" data-fin="${k}">Complete Workout</button></div>` : '');
+      (mine ? `<div class="lbtns"><button class="btn sm amber" data-${ps ? 'resume' : 'pause'}="${k}">${ps ? 'Resume' : 'Pause'}</button><button class="btn sm blue" data-restart="${k}">Restart Counter</button>${k === 'indoor' ? '<button class="btn sm violet" data-lplan="1">Modify/Add Workouts</button>' : `<button class="btn sm red" data-stop="${k}">Stop</button>`}<button class="btn sm" data-fin="${k}">Complete Workout</button>${k === 'indoor' ? '<div style="grid-column:1/-1;display:flex;justify-content:center"><button class="btn sm red" data-wreset="indoor">Plan a new workout</button></div>' : ''}</div>` : '');
   }
   else if (other.st === 'running' || other.st === 'paused') body = `<div class="note">Finish your other workout first.</div>`;
   else body = `<select data-wtype="${k}">${types.map(t => `<option ${t === (S.wtype[k] || types[0]) ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="row" style="margin-top:14px"><button class="btn" data-start="${k}">Start 45 min</button></div>`;
@@ -453,7 +453,7 @@ function liftPick(p, bare) {
   const live = wRow(p.id, TD, 'indoor'), busy = wInfo(live).st !== 'idle';
   const ty = busy && IT.some(x => x[0] === live.type) ? live.type : (S.wtype.indoor || 'Lift'), lift = ty === 'Lift';
   S.wtype.indoor = ty; syncType(ty);
-  const typeQ = `<div class="lbl" style="margin-bottom:8px">What indoor workout are we going to target?</div><select data-wtype="indoor" ${busy ? 'disabled' : ''}>${IT.map(([v, n]) => `<option value="${v}" ${v === ty ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
+  const typeQ = `<div class="lbl" style="margin-bottom:8px">What indoor workout are we going to target?</div><select data-wtype="indoor">${IT.map(([v, n]) => `<option value="${v}" ${v === ty ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
   if (!lift) return W(`${typeQ}${planSection()}`);
   return W(`${typeQ}<div class="lbl" style="margin:18px 0 4px">What are we training?</div><p class="note" style="margin:0 0 4px">Pick one or more muscle groups.</p><div class="chips">${chips}</div>
     <div class="row" style="margin-top:6px"><button class="btn ctl" id="lsubmit" ${sel.length ? '' : 'disabled style="opacity:.45"'}>Next</button></div>
@@ -485,7 +485,7 @@ function liftTile(p, key) {
   // Defaults: today's last set once you have logged one, otherwise the top set from last time. Sets box = sets still to go.
   const top = lt ? lt.rows.slice().sort((a, b) => (+b.weight || 0) - (+a.weight || 0) || a.set_no - b.set_no)[0] : null, src = done[done.length - 1] || top || {};
   const wv = src.weight != null && +src.weight > 0 ? +src.weight : '', rv = src.reps ?? '', tsec = src.seconds || 0;
-  const sv = Math.max(1, (lt ? lt.rows.length : 1) - done.length), mv = tsec ? Math.floor(tsec / 60) : '', tv = tsec ? tsec % 60 : '';
+  const sv = 1, mv = tsec ? Math.floor(tsec / 60) : '', tv = tsec ? tsec % 60 : '';
   const sum = fin ? 'Done' : done.length ? `${done.length} set${done.length === 1 ? '' : 's'}` : 'No sets yet';
   const fld = (cls, label, ph, val, extra = '') => `<label class="fld"><span>${label}</span><input type="number" class="ctl ${cls}" inputmode="${cls === 'lw' ? 'decimal' : 'numeric'}" min="0" ${extra} placeholder="${ph}" value="${val}"></label>`;
   const rows = done.map(r => `<div class="row" style="border-top:1px solid var(--line);padding:8px 0"><span class="badge">Set ${r.set_no}</span><span style="flex:1;font-size:15px">${fmtSet(r)}</span></div>`).join('');
@@ -639,10 +639,17 @@ function pushCard() {
   else btn = '<button class="btn sm" id="pushOn">Turn on reminders</button>';
   return `<div class="card"><div class="row sp"><div><div class="lbl">Reminders</div><div style="margin-top:6px;font-size:14px">10 am &middot; 12 pm &middot; 2 pm &middot; 4 pm &middot; 6 pm</div></div>${mine ? badge : ''}</div>${msg ? `<p class="note" style="margin-top:10px">${msg}</p>` : ''}${btn && mine ? `<div class="row" style="margin-top:12px">${btn}</div>` : ''}</div>`;
 }
+const isDaddy = p => ['daddy', 'tyler'].includes(String(p.name).trim().toLowerCase());
+function aminoCard(p, dr) {
+  if (!isDaddy(p)) return '';
+  const on = !!dr.amino;
+  return `<div class="card"><div class="row sp"><div><div class="lbl">Amino + creatine</div><div style="margin-top:6px;font-size:15px">${on ? 'Logged for today. 8 oz counted toward your water.' : 'One 8 oz drink a day. Logging it adds 8 oz to your water.'}</div></div><span class="badge ${on ? 'good' : ''}">${on ? tick + ' 1 of 1' : '0 of 1'}</span></div>
+    <div class="row" style="margin-top:14px;gap:8px">${on ? '<button class="btn amber sm ctl" data-amino="1">Undo</button>' : '<button class="btn ctl" data-amino="1">I drank my amino</button>'}</div></div>`;
+}
 function vWater() {
   if (S.view === 'split' && partner()) return splitWater();
-  const p = viewed(), oz = dailyRow(p.id, TD).water_oz, WC = COLORS.water, js = jugsFor(p), tea = p.water_style === 'teacup';
-  let used = 0; const items = js.map((sz, i) => { used += sz; return { sz, i, filled: oz >= used }; });
+  const p = viewed(), dr = dailyRow(p.id, TD), oz = dr.water_oz, am = dr.amino ? 8 : 0, WC = COLORS.water, js = jugsFor(p), tea = p.water_style === 'teacup';
+  let used = 0; const items = js.map((sz, i) => { used += sz; return { sz, i, filled: oz - am >= used }; });
   const jugSvg = (sz, filled) => { const w = sz === 40 ? 56 : 44, h = sz === 40 ? 96 : 76;
     return `<svg width="${w}" height="${h}" viewBox="0 0 56 96"><rect x="20" y="2" width="16" height="8" rx="3" fill="none" stroke="${WC}" stroke-width="2"/><rect x="6" y="12" width="44" height="82" rx="14" fill="${filled ? WC : 'transparent'}" fill-opacity=".85" stroke="${WC}" stroke-width="2.5" style="filter:drop-shadow(0 0 ${filled ? 9 : 2}px ${WC})"/></svg>`; };
   const cup = f => `<svg width="56" height="64" viewBox="0 0 56 64"><path d="M8 18h34v20a14 14 0 01-14 14h-6A14 14 0 018 38z" fill="${f ? WC : 'transparent'}" fill-opacity=".85" stroke="${WC}" stroke-width="2.5" style="filter:drop-shadow(0 0 ${f ? 9 : 2}px ${WC})"/><path d="M42 24h4a6 6 0 010 14h-5" fill="none" stroke="${WC}" stroke-width="2.5"/><path d="M18 8c-2 3 2 4 0 7M28 8c-2 3 2 4 0 7" fill="none" stroke="${WC}" stroke-width="2" stroke-linecap="round" opacity=".7"/></svg>`;
@@ -650,6 +657,7 @@ function vWater() {
   const cupBtn = tea ? `<button class="jug ctl" data-cup="1">${cup(oz >= 128)}<span>TEA &middot; 8 OZ</span></button>` : '';
   return header('<em>Water</em>') + testBar(p) + `<div class="card" style="text-align:center">${ring(176, 12, Math.min(oz / WATER, 1), WC, `<span class="num" style="font-size:40px;font-weight:800">${oz}</span><span class="lbl">of 128 oz</span>`)}
    <div class="jugs">${jugBtns}${cupBtn}</div><p class="note">Tap each jug when you finish it.${tea ? ' Your last 8 oz is the tea at night.' : ''}</p></div>
+   ${aminoCard(p, dr)}
    ${pushCard()}
    <div class="card"><div class="lbl">What a reminder looks like</div>
    <div class="banner show" style="position:static;transform:none;transition:none;width:100%"><div class="ic">${NICON}</div><div style="flex:1"><div class="t">Water Reminder<span>10 am, 12, 2, 4, 6</span></div><div class="m">${ntText()}</div></div></div>
@@ -860,7 +868,7 @@ document.addEventListener('click', async e => {
   if (!S.me) return;
   if (d.tab) { S.tab = d.tab; S.sub = null; $('app').scrollTo(0, 0); render(); return; }
   if (d.calopen) { S.tab = 'workouts'; S.sub = 'indoor'; $('app').scrollTo(0, 0); render(); return; }
-  if (d.calview) { try { localStorage.setItem('calView2', d.calview); } catch (_) { } render(); return; }
+  if (d.calview) { S.calView = d.calview; render(); return; }
   if (d.calday) { S.calSel = d.calday; render(); return; }
   if (d.calstep) { S.calSel = addDays(S.calSel, +d.calstep); S.calMonth = S.calSel.slice(0, 7); render(); return; }
   if (d.caltoday) { S.calSel = TD; S.calMonth = TD.slice(0, 7); render(); return; }
@@ -1009,7 +1017,8 @@ document.addEventListener('click', async e => {
     return saveWorkout({ user_id: u, day: today, kind: d.late, type: S.wtype[d.late] || types[0], started_at: new Date(+end - WLEN).toISOString(), done_at: end.toISOString(), override: false });
   }
   if (d.fin) { const row = wRow(u, today, d.fin); return saveWorkout({ ...row, done_at: new Date().toISOString() }); }
-  if (d.jug !== undefined) { const js = jugsFor(S.me), idx = +d.jug, oz = dailyRow(u, today).water_oz, upto = js.slice(0, idx + 1).reduce((a, b) => a + b, 0), below = js.slice(0, idx).reduce((a, b) => a + b, 0); return saveDaily(today, { water_oz: oz >= upto ? below : upto }); }
+  if (d.amino) { const r = dailyRow(u, today), on = !!r.amino; return saveDaily(today, { amino: !on, water_oz: on ? Math.max(0, r.water_oz - 8) : r.water_oz + 8 }); }
+  if (d.jug !== undefined) { const js = jugsFor(S.me), am = dailyRow(u, today).amino ? 8 : 0, idx = +d.jug, oz = dailyRow(u, today).water_oz - am, upto = js.slice(0, idx + 1).reduce((a, b) => a + b, 0), below = js.slice(0, idx).reduce((a, b) => a + b, 0); return saveDaily(today, { water_oz: (oz >= upto ? below : upto) + am }); }
   if (d.cup) return saveDaily(today, { water_oz: dailyRow(u, today).water_oz >= 128 ? 120 : 128 });
   if (d.pg) {
     const delta = +d.pg, cur = dailyRow(u, today).pages, next = Math.max(0, cur + delta);
@@ -1034,7 +1043,12 @@ document.addEventListener('click', async e => {
 });
 document.addEventListener('change', async e => {
   const t = e.target;
-  if (t.dataset.wtype) { S.wtype[t.dataset.wtype] = t.value; if (t.dataset.wtype === 'indoor') { syncType(t.value); lSave(); render(); } return; }
+  if (t.dataset.wtype) { S.wtype[t.dataset.wtype] = t.value; if (t.dataset.wtype === 'indoor') {
+    syncType(t.value); lSave();
+    const row = S.user && wRow(S.user.id, TD, 'indoor');
+    if (row && !row.done_at && row.type !== t.value) { saveWorkout({ ...row, type: t.value }); return; }
+    render();
+  } return; }
   if (t.id === 'lpick') { const n = $('lname'); if (t.value === '__custom') { n.style.display = ''; n.value = ''; n.focus(); } else { n.style.display = 'none'; n.value = t.value; } return; }
   if (t.id === 'ph' && t.files[0]) uploadPhoto(t.files[0], TD);
   if (t.id === 'phOld' && t.files[0]) {
