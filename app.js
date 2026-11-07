@@ -5,7 +5,8 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const sb = supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 
 const WLEN = 45 * 60e3, GAP = 3 * 3600e3, WATER = 128;
-const COLORS = { indoor: '#ff2e63', outdoor: '#ffc400', water: '#00e676', reading: '#00b0ff', photo: '#e0e0e0' };   // Dark Neon
+const COLORS = { indoor: '#ff3b30', outdoor: '#ffd60a', water: '#30d158', reading: '#0a84ff', photo: '#f2f2f7' };   // Traffic control, with neon glow
+const WATERBLUE = '#0a84ff';
 const RCOL = COLORS;
 const NAMES = { indoor: 'Indoor', outdoor: 'Outdoor', water: 'Water', reading: 'Reading', photo: 'Photo' };
 const MSGS = [
@@ -665,12 +666,12 @@ const isDaddy = p => ['daddy', 'tyler'].includes(String(p.name).trim().toLowerCa
 function aminoCard(p, dr) {
   if (!isDaddy(p)) return '';
   const on = !!dr.amino, ed = editable() && p.id === S.me.id;
-  const r = ring(130, 12, on ? 1 : 0, '#ea80fc', `<span class="num" style="font-size:30px;font-weight:800">${on ? tick : '8 oz'}</span><span class="lbl">amino</span>`);
+  const r = ring(130, 12, on ? 1 : 0, WATERBLUE, `<span class="num" style="font-size:30px;font-weight:800">${on ? tick : '8 oz'}</span><span class="lbl">amino</span>`);
   return `<div class="card" style="text-align:center">${ed ? `<button class="ctl" data-amino="1" style="background:none;border:0;padding:0;color:inherit" aria-label="Amino drink">${r}</button>` : r}</div>`;
 }
 function vWater() {
   if (S.view === 'split' && partner()) return splitWater();
-  const p = viewed(), dr = dailyRow(p.id, TD), oz = dr.water_oz, am = dr.amino ? 8 : 0, WC = COLORS.water, js = jugsFor(p), tea = p.water_style === 'teacup';
+  const p = viewed(), dr = dailyRow(p.id, TD), oz = dr.water_oz, am = dr.amino ? 8 : 0, WC = WATERBLUE, js = jugsFor(p), tea = p.water_style === 'teacup';
   let used = 0; const items = js.map((sz, i) => { used += sz; return { sz, i, filled: (isDaddy(p) && js.length === 4 && i === 3) ? !!am : oz - am >= used }; });
   const jugSvg = (sz, filled, anim) => { const w = sz === 40 ? 56 : 44, h = sz === 40 ? 96 : 76;
     const body = anim ? 'transparent' : (filled ? WC : 'transparent');
@@ -700,9 +701,16 @@ function vReading() {
 function nextCheck(p) { const ws = D.weigh[p.id] || []; if (!ws.length) return 1; const last = ws[ws.length - 1].day_num; return CHECKS.find(c => c > last) || null; }
 function chart(p) {
   const ws = D.weigh[p.id] || []; if (ws.length < 2) return '<p class="note" style="margin:10px 0 0">Your weight line will appear here after your second weigh-in.</p>';
-  const W = 300, H = 110, pd = 14, vals = ws.map(x => +x.weight), mn = Math.min(...vals) - 3, mx = Math.max(...vals) + 3;
-  const pts = ws.map(x => [pd + (x.day_num - 1) / 74 * (W - 2 * pd), H - pd - ((+x.weight - mn) / (mx - mn)) * (H - 2 * pd)]);
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="margin-top:10px"><polyline points="${pts.map(q => q.join(',')).join(' ')}" fill="none" stroke="#2fd98f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>${pts.map((q, i) => `<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="#2fd98f"/><text x="${q[0]}" y="${q[1] - 9}" fill="#eaf4ee" font-size="10" text-anchor="middle">${ws[i].weight}</text>`).join('')}</svg>`;
+  const W = 340, H = 200, L = 44, R = 14, T = 22, B = 40, vals = ws.map(x => +x.weight);
+  let mn = Math.floor(Math.min(...vals) - 2), mx = Math.ceil(Math.max(...vals) + 2); if (mx - mn < 6) { mn -= 3; mx += 3; }
+  const X = d => L + (d - 1) / 74 * (W - L - R), Y = v => T + (1 - (v - mn) / (mx - mn)) * (H - T - B);
+  const pts = ws.map(x => [X(x.day_num), Y(+x.weight)]);
+  const grid = [0, 1, 2, 3].map(i => { const v = mn + (mx - mn) * i / 3, y = Y(v); return `<line x1="${L}" y1="${y}" x2="${W - R}" y2="${y}" stroke="rgba(255,255,255,.1)"/><text x="${L - 6}" y="${y + 3}" fill="#8da396" font-size="10" text-anchor="end">${Math.round(v * 10) / 10}</text>`; }).join('');
+  const ticks = ws.map(x => `<line x1="${X(x.day_num)}" y1="${H - B}" x2="${X(x.day_num)}" y2="${H - B + 4}" stroke="#8da396"/><text x="${X(x.day_num)}" y="${H - B + 16}" fill="#eaf4ee" font-size="10" text-anchor="middle">${x.day_num}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="margin-top:12px" role="img" aria-label="Weight by weigh-in day">${grid}<line x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}" stroke="#8da396"/>${ticks}
+   <text x="${L - 6}" y="12" fill="#8da396" font-size="10" text-anchor="end">lb</text><text x="${(L + W - R) / 2}" y="${H - 6}" fill="#8da396" font-size="10" text-anchor="middle">Weigh-in day</text>
+   <polyline points="${pts.map(q => q.join(',')).join(' ')}" fill="none" stroke="#30d158" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+   ${pts.map((q, i) => `<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="#30d158" stroke="#060c09" stroke-width="2"/><text x="${q[0]}" y="${q[1] - 9}" fill="#eaf4ee" font-size="10" text-anchor="middle">${+ws[i].weight}</text>`).join('')}</svg>`;
 }
 const PROG_IDS = ['numbers', 'days'];
 function progOrder() {
@@ -720,8 +728,6 @@ function vProgress() {
   const photoOf = d => D.daily[dkey(p.id, d)]?.photo_path;
   const todayPh = photoOf(TD), done = !!todayPh;
   const cells = Array.from({ length: 75 }, (_, i) => { const dd = addDays(p.start_date, i), ph = photoOf(dd); const u = ph && S.urls[ph]; return `<div class="${ph ? 'has' : ''} thumb" ${u ? `data-view="${esc(ph)}" data-cap="Day ${i + 1} &middot; ${pretty(dd)}" style="background-image:url('${u}')"` : ''}>${i + 1}</div>`; }).join('');
-  const prac = Object.values(D.daily).filter(r => r.user_id === p.id && r.photo_path && r.day < p.start_date).sort((a, b) => a.day < b.day ? -1 : 1);
-  const pracHtml = prac.length ? `<div class="lbl" style="margin:14px 0 8px">Practice photos</div><div class="grid75">${prac.map(r => { const u = S.urls[r.photo_path]; return `<div class="has thumb" ${u ? `data-view="${esc(r.photo_path)}" data-cap="Practice &middot; ${pretty(r.day)}" style="background-image:url('${u}')"` : ''}>${pretty(r.day).split(' ')[1] || ''}</div>`; }).join('')}</div>` : '';
   const due = CHECKS.find(c => n >= c && !ws.some(x => x.day_num === c));
   const slots = CHECKS.map(c => {
     const rec = ws.find(x => x.day_num === c), open = n >= c || c === 10;   // TEMP: Day 10 open for testing
@@ -737,7 +743,7 @@ function vProgress() {
    </div>
    <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px"><div class="lbl">Weigh-ins &middot; every 10 days</div>${due ? `<p style="margin:8px 0 0;font-size:15px"><b>Day ${due} weigh-in is due.</b> Step on the scale and log it below.</p>` : ''}${slots}</div>
    ${chart(p)}</div>`,
-    days: `<div class="card dtile" data-tile="days"><div style="padding-right:44px" class="lbl">All 75 days</div>${GRIP}<div class="grid75" style="margin-top:10px">${cells}</div>${pracHtml}</div>`
+    days: `<div class="card dtile" data-tile="days"><div style="padding-right:44px" class="lbl">Progress Photos</div>${GRIP}<div class="grid75" style="margin-top:10px">${cells}</div></div>`
   };
   return header('<em>Progress</em>') + `<div id="ptiles" data-dragbox="progress">${progOrder().map(k => tiles[k]).join('')}</div>`;
 }
@@ -754,12 +760,12 @@ function splitCols(fn) {
   return `<div class="split">${[S.me, pr].map(p => `<div class="p"><h3>${esc(p.name)}</h3>${fn(p)}</div>`).join('')}</div>
   <p class="note" style="margin-top:12px">Live view. Tap ${esc(S.me.name)} at the top to log your own, or ${esc(pr.name)} to look at theirs.</p>`;
 }
-const jugMini = (filled) => `<svg width="24" height="42" viewBox="0 0 56 96"><rect x="20" y="2" width="16" height="8" rx="3" fill="none" stroke="${COLORS.water}" stroke-width="3"/><rect x="6" y="12" width="44" height="82" rx="14" fill="${filled ? COLORS.water : 'transparent'}" fill-opacity=".85" stroke="${COLORS.water}" stroke-width="4"/></svg>`;
+const jugMini = (filled) => `<svg width="24" height="42" viewBox="0 0 56 96"><rect x="20" y="2" width="16" height="8" rx="3" fill="none" stroke="${WATERBLUE}" stroke-width="3"/><rect x="6" y="12" width="44" height="82" rx="14" fill="${filled ? WATERBLUE : 'transparent'}" fill-opacity=".85" stroke="${WATERBLUE}" stroke-width="4"/></svg>`;
 function splitWater() {
   return header('<em>Water</em>') + splitCols(p => {
     const oz = dailyRow(p.id, TD).water_oz, js = jugsFor(p); let used = 0;
     const jugs = js.map(sz => { used += sz; return jugMini(oz >= used); }).join('') + (p.water_style === 'teacup' ? `<span style="font-size:20px;opacity:${oz >= 128 ? 1 : .35}">&#9749;</span>` : '');
-    return `<div style="text-align:center">${ring(110, 10, Math.min(oz / WATER, 1), COLORS.water, `<span class="num" style="font-size:26px;font-weight:800">${oz}</span><span class="lbl">of 128 oz</span>`)}</div><div class="row" style="justify-content:center;gap:6px;margin-top:10px;align-items:flex-end">${jugs}</div>`;
+    return `<div style="text-align:center">${ring(110, 10, Math.min(oz / WATER, 1), WATERBLUE, `<span class="num" style="font-size:26px;font-weight:800">${oz}</span><span class="lbl">of 128 oz</span>`)}</div><div class="row" style="justify-content:center;gap:6px;margin-top:10px;align-items:flex-end">${jugs}</div>`;
   });
 }
 function splitWorkouts() {
