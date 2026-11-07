@@ -5,8 +5,8 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const sb = supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 
 const WLEN = 45 * 60e3, GAP = 3 * 3600e3, WATER = 128;
-const COLORS = { indoor: '#2fd98f', outdoor: '#c9e25f', water: '#4fc8e6', reading: '#e8cf8a', photo: '#e9a36b' };
-const RCOL = { indoor: '#ff4d8d', outdoor: '#ffb020', water: '#35c6ff', reading: '#a78bfa', photo: '#3ddc97' };
+const COLORS = { indoor: '#ff2e63', outdoor: '#ffc400', water: '#00e676', reading: '#00b0ff', photo: '#e0e0e0' };   // Dark Neon
+const RCOL = COLORS;
 const NAMES = { indoor: 'Indoor', outdoor: 'Outdoor', water: 'Water', reading: 'Reading', photo: 'Photo' };
 const MSGS = [
   'Look at you. Every box closed. That is what showing up looks like.',
@@ -157,11 +157,13 @@ async function compress(file, max = 1280) {
 }
 async function uploadPhoto(file, date) {
   try {
+    toast('Saving photo...');
     const blob = await compress(file), path = `${S.user.id}/${date}.jpg`;
     const { error } = await sb.storage.from('progress-photos').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
     if (error) throw error;
     S.urls[path] = URL.createObjectURL(blob);
     await saveDaily(date, { photo_path: path });
+    toast('Photo saved.');
   } catch (e) { toast('Photo upload failed: ' + (e.message || e)); }
 }
 async function ensureUrls() {
@@ -185,12 +187,12 @@ let ARC_LAST = {}, ARC_TAB = null;
 const lite = (hex, a) => { const n = parseInt(hex.slice(1), 16), m = x => Math.round(x + (255 - x) * a); return `rgb(${m(n >> 16)},${m(n >> 8 & 255)},${m(n & 255)})`; };
 function allRings(u, o = {}) {
   const f = rings(u, TD), keys = Object.keys(NAMES), size = o.size || 300, stroke = o.stroke || 22, step = o.step || stroke + 3, c0 = size / 2;
-  const defs = keys.map(k => `<linearGradient id="g-${u}-${k}-${size}" gradientUnits="userSpaceOnUse" x1="0" y1="${size}" x2="${size}" y2="0"><stop offset="0" stop-color="${RCOL[k]}"/><stop offset="1" stop-color="${lite(RCOL[k], .28)}"/></linearGradient>`).join('');
+  const defs = keys.map(k => `<linearGradient id="g-${u}-${k}-${size}" gradientUnits="userSpaceOnUse" x1="0" y1="${size}" x2="${size}" y2="0"><stop offset="0" stop-color="${RCOL[k]}"/><stop offset="1" stop-color="${lite(RCOL[k], .35)}"/></linearGradient>`).join('');
   const svg = keys.map((k, i) => {
     const r = (size - stroke) / 2 - i * step, c = 2 * Math.PI * r, last = ARC_LAST[u + k] || 0;
     return `<circle cx="${c0}" cy="${c0}" r="${r}" fill="none" stroke="#04100a" stroke-width="${stroke + 4}"/>` +
       `<circle cx="${c0}" cy="${c0}" r="${r}" fill="none" stroke="${RCOL[k]}" stroke-opacity=".16" stroke-width="${stroke}"/>` +
-      `<circle class="arc" data-arc="${u + k}" data-f="${Math.max(f[k], .001)}" data-c="${c}" style="transition-delay:${i * 120}ms;filter:drop-shadow(0 0 2.5px rgba(0,0,0,.6))" cx="${c0}" cy="${c0}" r="${r}" fill="none" stroke="url(#g-${u}-${k}-${size})" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - Math.max(last, .001))}"/>`;
+      `<circle class="arc" data-arc="${u + k}" data-f="${Math.max(f[k], .001)}" data-c="${c}" style="transition-delay:${i * 120}ms;filter:drop-shadow(0 0 3px ${RCOL[k]}) drop-shadow(0 0 9px ${RCOL[k]})" cx="${c0}" cy="${c0}" r="${r}" fill="none" stroke="url(#g-${u}-${k}-${size})" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - Math.max(last, .001))}"/>`;
   }).join('');
   const legend = o.legend === false ? '' : `<div class="arclegend">${keys.map(k => `<div class="lg"><i style="background:${RCOL[k]}"></i><span>${NAMES[k]}</span><b>${Math.round(f[k] * 100)}%</b></div>`).join('')}</div>`;
   return `<div class="big"><span class="ringwrap" style="width:${size}px;height:${size}px"><svg width="${size}" height="${size}" style="transform:rotate(-90deg)"><defs>${defs}</defs>${svg}</svg></span></div>${legend}`;
@@ -280,7 +282,7 @@ function vToday() {
       return `<div class="p"><h3>${esc(p.name)}</h3>${allRings(p.id, { size: 160, stroke: 11, step: 14 })}
       <div class="mini" style="margin-top:10px"><span class="box ${r.diet ? 'on' : ''}" style="width:22px;height:22px;border-radius:7px">${r.diet ? tick : ''}</span><span style="flex:1">Diet</span><b style="color:var(--text);font-size:11px">${r.diet ? 'Done' : 'Not yet'}</b></div>
       <div style="margin-top:10px"><span class="badge ${done ? 'good' : ''}">${done ? 'Day complete' : 'In progress'}</span></div></div>`; };
-    return header('Today') + `<div class="card" style="text-align:center"><div class="big">${ring(200, 12, c.frac, '#2fd98f', `<span class="days" style="font-size:64px">${c.left}</span><span class="dayslbl">${c.sub}</span>`)}</div></div><div class="split">${col(S.me)}${col(pr)}</div>
+    return header('Today') + `<div class="card" style="text-align:center"><div class="big">${ring(200, 12, c.frac, '#00e676', `<span class="days" style="font-size:64px">${c.left}</span><span class="dayslbl">${c.sub}</span>`)}</div></div><div class="split">${col(S.me)}${col(pr)}</div>
       <p class="note" style="margin-top:12px">Live view. When ${esc(pr.name)} checks something off, it shows up here.</p>`;
   }
   const f = rings(v.id, TD), c = dayCounter(v);
@@ -291,7 +293,7 @@ function vToday() {
   if (!pr) other = `<div class="card"><div class="lbl">Waiting for your partner</div><p class="note" style="margin:8px 0 0">Once they create their account, their rings show up here live.</p></div>`;
   return header('Good <em>' + greet() + '</em>') + testBar(v) +
     `<div id="tiles" data-dragbox="today">${tileOrder().map(k => k === 'days'
-      ? `<div class="card dtile" data-tile="days">${GRIP}<div class="big">${ring(280, 13, c.frac, '#2fd98f', `<span class="days">${c.left}</span><span class="dayslbl">${c.sub}</span>`)}</div>${c.note ? `<p class="note" style="text-align:center;margin:0">${c.note}</p>` : ''}</div>`
+      ? `<div class="card dtile" data-tile="days">${GRIP}<div class="big">${ring(280, 13, c.frac, '#00e676', `<span class="days">${c.left}</span><span class="dayslbl">${c.sub}</span>`)}</div>${c.note ? `<p class="note" style="text-align:center;margin:0">${c.note}</p>` : ''}</div>`
       : k === 'all'
         ? `<div class="card dtile" data-tile="all">${GRIP}${allRings(v.id)}</div>`
         : k === 'cal' ? calTile(v)
@@ -354,7 +356,7 @@ async function saveDayPlan(u, day, items) {
 function photoTile(v) {
   const done = !!dailyRow(v.id, TD).photo_path, ed = editable() && v.id === S.me.id;
   const r = ring(130, 12, done ? 1 : 0, COLORS.photo, `<span class="num" style="font-size:26px;font-weight:800">${done ? tick : '+'}</span><span class="lbl">${done ? 'photo done' : 'add photo'}</span>`);
-  return `<div class="card dtile" data-tile="photo">${GRIP}<div class="lbl" style="margin-bottom:12px">Progress photo</div><div class="big">${ed ? `<label for="ph" class="ctl" style="display:block;cursor:pointer">${r}</label>` : r}</div><p class="note" style="text-align:center;margin:10px 0 0">${done ? 'Photo added. Tap the ring to replace it.' : 'Tap the ring to take or choose today\'s photo.'}</p></div>`;
+  return `<div class="card dtile" data-tile="photo">${GRIP}<div class="lbl" style="margin-bottom:12px">Progress photo</div><div class="big">${ed ? `<button class="ctl" data-phopen="1" style="background:none;border:0;padding:0;color:inherit" aria-label="Take or choose today's photo">${r}</button>` : r}</div><p class="note" style="text-align:center;margin:10px 0 0">${done ? 'Photo added. Tap the ring to replace it.' : 'Tap the ring to take or choose today\'s photo.'}</p></div>`;
 }
 function readTile(v) {
   const pages = dailyRow(v.id, TD).pages, done = pages >= 10, ed = editable() && v.id === S.me.id;
@@ -662,7 +664,7 @@ const isDaddy = p => ['daddy', 'tyler'].includes(String(p.name).trim().toLowerCa
 function aminoCard(p, dr) {
   if (!isDaddy(p)) return '';
   const on = !!dr.amino, ed = editable() && p.id === S.me.id;
-  const r = ring(130, 12, on ? 1 : 0, '#b794f4', `<span class="num" style="font-size:30px;font-weight:800">${on ? tick : '8 oz'}</span><span class="lbl">amino</span>`);
+  const r = ring(130, 12, on ? 1 : 0, '#ea80fc', `<span class="num" style="font-size:30px;font-weight:800">${on ? tick : '8 oz'}</span><span class="lbl">amino</span>`);
   return `<div class="card" style="text-align:center">${ed ? `<button class="ctl" data-amino="1" style="background:none;border:0;padding:0;color:inherit" aria-label="Amino drink">${r}</button>` : r}</div>`;
 }
 function vWater() {
@@ -699,7 +701,7 @@ function chart(p) {
   const pts = ws.map(x => [pd + (x.day_num - 1) / 74 * (W - 2 * pd), H - pd - ((+x.weight - mn) / (mx - mn)) * (H - 2 * pd)]);
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="margin-top:10px"><polyline points="${pts.map(q => q.join(',')).join(' ')}" fill="none" stroke="#2fd98f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>${pts.map((q, i) => `<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="#2fd98f"/><text x="${q[0]}" y="${q[1] - 9}" fill="#eaf4ee" font-size="10" text-anchor="middle">${ws[i].weight}</text>`).join('')}</svg>`;
 }
-const PROG_IDS = ['numbers', 'photo', 'days'];
+const PROG_IDS = ['numbers', 'days'];
 function progOrder() {
   try { let o = JSON.parse(localStorage.getItem('progOrder')); if (Array.isArray(o)) { o = o.filter(k => PROG_IDS.includes(k)); for (const k of PROG_IDS) if (!o.includes(k)) o.push(k); return o; } } catch (_) { }
   return PROG_IDS.slice();
@@ -717,7 +719,7 @@ function vProgress() {
   const cells = Array.from({ length: 75 }, (_, i) => { const ph = photoOf(addDays(p.start_date, i)); const u = ph && S.urls[ph]; return `<div class="${ph ? 'has' : ''} thumb" ${u ? `style="background-image:url('${u}')"` : ''}>${i + 1}</div>`; }).join('');
   const due = CHECKS.find(c => n >= c && !ws.some(x => x.day_num === c));
   const slots = CHECKS.map(c => {
-    const rec = ws.find(x => x.day_num === c), open = n >= c;
+    const rec = ws.find(x => x.day_num === c), open = n >= c || c === 10;   // TEMP: Day 10 open for testing
     return `<div class="row" style="gap:8px;margin-top:8px"><div style="width:62px;font-size:14px;font-weight:700">Day ${c}</div>${open || rec ? `<input type="number" class="ctl" id="wt-${c}" placeholder="lb" step="0.1" min="50" max="600" value="${rec ? +rec.weight : ''}" ${mine ? '' : 'disabled'}>${mine ? `<button class="btn sm ctl" data-wslot="${c}" style="white-space:nowrap">${rec ? 'Update' : 'Log'}</button>` : ''}${due === c ? '<span class="badge">Due</span>' : ''}` : `<span class="note" style="margin:0">Unlocks on Day ${c}</span>`}</div>`;
   }).join('');
   const tiles = {
@@ -730,9 +732,6 @@ function vProgress() {
    </div>
    <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px"><div class="lbl">Weigh-ins &middot; every 10 days</div>${due ? `<p style="margin:8px 0 0;font-size:15px"><b>Day ${due} weigh-in is due.</b> Step on the scale and log it below.</p>` : ''}${slots}</div>
    ${chart(p)}</div>`,
-    photo: `<div class="card dtile" data-tile="photo" style="text-align:center">${GRIP}${ring(110, 10, done ? 1 : 0, COLORS.photo, `<span class="lbl" style="color:var(--text)">${done ? 'Done' : 'Today'}</span>`)}
-   ${mine ? `<div class="row ctl" style="justify-content:center;margin-top:16px;flex-wrap:wrap"><label class="btn" for="ph">${done ? 'Replace today\'s photo' : 'Add today\'s photo'}</label><label class="btn ghost">Add an older photo<input id="phOld" type="file" accept="image/*" hidden></label></div>` : ''}
-   <p class="note" style="margin-top:12px">Take it with your camera or pick one from your camera roll. You can both see each other's photos.</p></div>`,
     days: `<div class="card dtile" data-tile="days"><div style="padding-right:44px" class="lbl">All 75 days</div>${GRIP}<div class="grid75" style="margin-top:10px">${cells}</div></div>`
   };
   return header('<em>Progress</em>') + `<div id="ptiles" data-dragbox="progress">${progOrder().map(k => tiles[k]).join('')}</div>`;
@@ -913,6 +912,7 @@ document.addEventListener('click', async e => {
   if (t.id === 'pushTest') { try { const reg = await navigator.serviceWorker.ready; await reg.showNotification('Water Reminder', { body: reminderText(S.me, dailyRow(S.me.id, TD).water_oz), icon: 'icon-180.png' }); } catch (e) { toast('Could not show it: ' + e.message); } return; }
   if (t.id === 'atoggle') { S.authMode = S.authMode === 'up' ? 'in' : 'up'; render(); return; }
   if (!S.me) return;
+  if (d.phopen) { if (editable()) $('ph').click(); return; }
   if (d.tab) { S.tab = d.tab; S.sub = null; $('app').scrollTo(0, 0); render(); return; }
   if (d.calopen) { S.tab = 'workouts'; S.sub = 'indoor'; $('app').scrollTo(0, 0); render(); return; }
   if (d.calview) { S.calView = d.calview; render(); return; }
