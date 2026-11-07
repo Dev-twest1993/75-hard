@@ -758,7 +758,7 @@ function vProgress() {
   const cells = Array.from({ length: 75 }, (_, i) => { const dd = addDays(p.start_date, i), ph = photoOf(dd); const u = ph && S.urls[ph]; return `<div class="${ph ? 'has' : ''} thumb" ${u ? `data-pv="${esc(ph)}" data-cap="Day ${i + 1} &middot; ${pretty(dd)}" style="background-image:url('${u}')"` : ''}>${i + 1}</div>`; }).join('');
   const due = CHECKS.find(c => n >= c && !ws.some(x => x.day_num === c));
   const slots = CHECKS.map(c => {
-    const rec = ws.find(x => x.day_num === c), open = n >= c || c === 10;   // TEMP: Day 10 open for testing
+    const rec = ws.find(x => x.day_num === c), open = n >= c;
     return `<div class="row" style="gap:8px;margin-top:8px"><div style="width:62px;font-size:14px;font-weight:700">Day ${c}</div>${open || rec ? `<input type="number" class="ctl" id="wt-${c}" placeholder="lb" step="0.1" min="50" max="600" value="${rec ? +rec.weight : ''}" ${mine ? '' : 'disabled'}>${mine ? `<button class="btn sm ctl" data-wslot="${c}" style="white-space:nowrap">${rec ? 'Update' : 'Log'}</button>` : ''}${due === c ? '<span class="badge">Due</span>' : ''}` : `<span class="note" style="margin:0">Unlocks on Day ${c}</span>`}</div>`;
   }).join('');
   const tiles = {
