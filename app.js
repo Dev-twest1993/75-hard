@@ -45,7 +45,11 @@ const dkey = (u, d) => u + '|' + d;
 const me = () => S.me;
 const partner = () => D.profiles.find(p => p.id !== S.me?.id) || null;
 const viewed = () => (S.view === 'partner' && partner()) ? partner() : S.me;
-const editable = () => viewed()?.id === S.me?.id;
+// On the wide (iPad) screen either profile can be logged for, whoever is signed in; on phones only your own.
+const WIDE = () => window.innerWidth >= 768;
+const canEdit = id => !!id && (id === S.me?.id || WIDE());
+const actor = () => (S.me && WIDE() && S.view === 'partner' && partner()) ? partner() : S.me;
+const editable = () => canEdit(viewed()?.id);
 
 function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 4500); }
 async function must(p) { const r = await p; if (r.error) { toast(r.error.message); throw r.error; } return r.data; }
@@ -128,7 +132,7 @@ function notify45(k) {
 }
 async function persistDone() {
   for (const row of Object.values(D.workouts)) {
-    if (row.user_id !== S.user.id || row.done_at) continue;
+    if (!canEdit(row.user_id) || row.done_at) continue;
     const i = wInfo(row);
     if (i.persist) { if (row.day === TD) notify45(row.kind); row.done_at = new Date(i.end).toISOString(); sb.from('workouts').update({ done_at: row.done_at }).match({ user_id: row.user_id, day: row.day, kind: row.kind }); }
   }
@@ -136,7 +140,7 @@ async function persistDone() {
 
 // ---------- writes (own rows only; the database enforces this too) ----------
 async function saveDaily(date, patch) {
-  const u = S.user.id, k = dkey(u, date);
+  const u = actor().id, k = dkey(u, date);
   const before = dailyRow(u, date).water_oz;
   if (patch.water_oz !== undefined && date === TD && before < 128 && patch.water_oz >= 128) setTimeout(water128, 250);
   D.daily[k] = { ...dailyRow(u, date), user_id: u, day: date, ...patch };
@@ -159,7 +163,7 @@ async function compress(file, max = 1280) {
 async function uploadPhoto(file, date) {
   try {
     toast('Saving photo...');
-    const blob = await compress(file), path = `${S.user.id}/${date}.jpg`;
+    const blob = await compress(file), path = `${actor().id}/${date}.jpg`;
     const { error } = await sb.storage.from('progress-photos').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
     if (error) throw error;
     S.urls[path] = URL.createObjectURL(blob);
@@ -253,16 +257,19 @@ document.addEventListener('pointerdown', e => {
   const tile = g.closest('.dtile'), box = tile && tile.parentElement; if (!tile || !box || !box.dataset.dragbox) return;
   const tiles = [...box.children], i = tiles.indexOf(tile), R = tiles.map(t => t.getBoundingClientRect());
   e.preventDefault(); S.dragging = true;
-  const y0 = e.clientY, h = R[i].height, gap = R.length > 1 ? R[1].top - R[0].bottom : 0, span = h + gap;
-  const minDy = R[0].top - R[i].top, maxDy = R[R.length - 1].bottom - R[i].bottom;
+  const x0 = e.clientX, y0 = e.clientY, c = R.map(r => [r.left + r.width / 2, r.top + r.height / 2]);
   tile.style.zIndex = 5; tile.style.transition = 'none'; tile.style.boxShadow = '0 14px 40px rgba(0,0,0,.6)';
   tiles.forEach((t, k) => { if (k !== i) t.style.transition = 'transform .22s ease'; });
   let j = i;
   const mv = ev => {
-    const dy = Math.max(minDy, Math.min(maxDy, ev.clientY - y0)), top = R[i].top + dy, bot = top + h;
-    tile.style.transform = `translateY(${dy}px)`;
-    j = i; R.forEach((r, k) => { const mid = r.top + r.height / 2; if (k < i && top < mid) j = Math.min(j, k); if (k > i && bot > mid) j = Math.max(j, k); });
-    tiles.forEach((t, k) => { if (k === i) return; t.style.transform = (i < j && k > i && k <= j) ? `translateY(${-span}px)` : (i > j && k < i && k >= j) ? `translateY(${span}px)` : ''; });
+    const dx = ev.clientX - x0, dy = ev.clientY - y0, cx = c[i][0] + dx, cy = c[i][1] + dy;
+    tile.style.transform = `translate(${dx}px,${dy}px)`;
+    let best = Infinity; j = i; c.forEach((q, k) => { const dd = (q[0] - cx) ** 2 + (q[1] - cy) ** 2; if (dd < best) { best = dd; j = k; } });
+    tiles.forEach((t, k) => {
+      if (k === i) return;
+      const to = (i < j && k > i && k <= j) ? k - 1 : (i > j && k < i && k >= j) ? k + 1 : k;
+      t.style.transform = to === k ? '' : `translate(${R[to].left - R[k].left}px,${R[to].top - R[k].top}px)`;
+    });
   };
   const up = () => {
     window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
@@ -319,7 +326,7 @@ function calTile(v) {
   if (S.calTD !== TD || (fin && S.calFin !== TD)) { S.calTD = TD; S.calFin = fin ? TD : null; S.calSel = fin ? addDays(TD, 1) : TD; S.calMonth = S.calSel.slice(0, 7); }
   if (!fin) S.calFin = null;
   const view = S.calView || 'day';
-  const sel = S.calSel, ed = editable() && v.id === S.me.id, saved = planOf(v.id, sel), editing = ed && (S.calEditing === sel || !saved.length);
+  const sel = S.calSel, ed = editable() && canEdit(v.id), saved = planOf(v.id, sel), editing = ed && (S.calEditing === sel || !saved.length);
   if (S.calDraftDay !== sel || !editing) { S.calDraftDay = sel; if (!editing) S.calDraft = saved.slice(); else if (S.calDraftFor !== sel) S.calDraft = saved.slice(); }
   S.calDraftFor = editing ? sel : null;
   const seg = (k, n) => `<button class="${view === k ? 'on' : ''}" data-calview="${k}">${n}</button>`;
@@ -370,19 +377,19 @@ async function saveDayPlan(u, day, items, detail) {
   if (error) { toast(error.message); await loadAll(); render(); }
 }
 function photoTile(v) {
-  const done = !!dailyRow(v.id, TD).photo_path, ed = editable() && v.id === S.me.id;
+  const done = !!dailyRow(v.id, TD).photo_path, ed = editable() && canEdit(v.id);
   const r = ring(130, 12, done ? 1 : 0, COLORS.photo, `<span class="num" style="font-size:26px;font-weight:800">${done ? tick : '+'}</span><span class="lbl">${done ? 'photo done' : 'add photo'}</span>`);
   return `<div class="card dtile" data-tile="photo">${GRIP}<div class="lbl" style="margin-bottom:12px">Progress photo</div><div class="big">${ed ? `<button class="ctl" data-phopen="1" style="background:none;border:0;padding:0;color:inherit" aria-label="Take or choose today's photo">${r}</button>` : r}</div><p class="note" style="text-align:center;margin:10px 0 0">${done ? 'Saved to your Progress page. Tap the ring to replace it.' : 'Tap the ring to take or choose today\'s photo.'}</p>${done && ed ? '<div class="row" style="justify-content:center;margin-top:12px"><button class="btn amber sm ctl" data-phundo="1">Undo</button></div>' : ''}</div>`;
 }
 function readTile(v) {
-  const pages = dailyRow(v.id, TD).pages, done = pages >= 10, ed = editable() && v.id === S.me.id;
+  const pages = dailyRow(v.id, TD).pages, done = pages >= 10, ed = editable() && canEdit(v.id);
   const r = ring(130, 12, Math.min(pages / 10, 1), COLORS.reading, `<span class="num" style="font-size:30px;font-weight:800">${pages}</span><span class="lbl">of 10 pages</span>`);
   return `<div class="card dtile" data-tile="reading">${GRIP}<div class="lbl" style="margin-bottom:12px">Reading</div><div class="big">${ed ? `<button class="ctl" data-rclose="1" style="background:none;border:0;padding:0;color:inherit" aria-label="${done ? 'Reading done. Tap to undo' : 'Tap to close the reading ring'}">${r}</button>` : r}</div><p class="note" style="text-align:center;margin:10px 0 0">${done ? 'Reading is done. Tap the ring to undo.' : 'Finished your 10 pages? Tap the ring to close it.'}</p></div>`;
 }
 function greet() { const h = new Date().getHours(); return h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'; }
 
 function lateRow(k, p) {
-  if (p.id !== S.me.id) return '';
+  if (!canEdit(p.id)) return '';
   const n = new Date(), hhmm = String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0');
   return `<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px"><div class="lbl" style="margin-bottom:8px">Forgot to start it?</div><div class="row" style="gap:8px"><input type="time" id="late-${k}" value="${hhmm}" style="flex:1"><button class="btn ghost sm" data-late="${k}">Mark complete</button></div><p class="note" style="margin-top:6px">Pick the time you finished. It counts as a full 45 minutes.</p></div>`;
 }
@@ -395,7 +402,7 @@ function wCard(k, p) {
   if (k === 'indoor' && w.st === 'idle') return '';
   if (w.st === 'done') body = `<div class="timer">Done</div><div class="note">${esc(row.type)} &middot; 45 min complete</div>`;
   else if (w.st === 'running' || w.st === 'paused') {
-    const ps = w.st === 'paused', mine = p.id === S.me.id;
+    const ps = w.st === 'paused', mine = canEdit(p.id);
     body = `<div class="timer" id="t-${k}">${mmss(w.left)}</div><div class="note">${esc(row.type)} ${ps ? 'is paused. The clock is stopped.' : 'in progress. It closes on its own at 45 minutes.'}</div>` +
       (mine ? `<div class="lbtns"><button class="btn sm amber" data-${ps ? 'resume' : 'pause'}="${k}">${ps ? 'Resume' : 'Pause'}</button><button class="btn sm blue" data-restart="${k}">Restart Timer</button>${k === 'indoor' ? '<button class="btn sm violet" data-lplan="1">Modify/Add Workouts</button>' : `<button class="btn sm red" data-stop="${k}">Stop</button>`}<button class="btn sm" data-fin="${k}">Complete Workout</button>${k === 'indoor' ? '<div style="grid-column:1/-1;display:flex;justify-content:center"><button class="btn sm red" data-wreset="indoor">Plan a new workout</button></div>' : ''}</div>` : '');
   }
@@ -413,7 +420,7 @@ function vWorkouts() {
   const tile = k => {
     const row = wRow(p.id, TD, k), w = wInfo(row);
     const st = w.st === 'done' ? `Done &middot; ${esc(row.type)}` : w.st === 'running' ? `${mmss(w.left)} left &middot; ${esc(row.type)}` : w.st === 'paused' ? `Paused &middot; ${mmss(w.left)} left` : 'Not started';
-    return `<div class="card wtile" data-open="${k}" role="button" tabindex="0"><div class="row sp"><div><div class="lbl">${wLabel(k)}</div><div id="ws-${k}" style="margin-top:6px;font-size:15px">${st}</div>${p.id === S.me.id && (w.st !== 'idle' || (k === 'indoor' && todaySetsAny(p.id))) ? `<div class="row" style="margin-top:10px;gap:8px"><button class="btn red sm" data-wreset="${k}">Reset</button></div>` : ''}</div><div class="row" style="gap:12px">${ring(54, 7, w.frac, COLORS[k])}<svg width="10" height="16" viewBox="0 0 10 16"><path d="M2 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/></svg></div></div></div>`;
+    return `<div class="card wtile" data-open="${k}" role="button" tabindex="0"><div class="row sp"><div><div class="lbl">${wLabel(k)}</div><div id="ws-${k}" style="margin-top:6px;font-size:15px">${st}</div>${canEdit(p.id) && (w.st !== 'idle' || (k === 'indoor' && todaySetsAny(p.id))) ? `<div class="row" style="margin-top:10px;gap:8px"><button class="btn red sm" data-wreset="${k}">Reset</button></div>` : ''}</div><div class="row" style="gap:12px">${ring(54, 7, w.frac, COLORS[k])}<svg width="10" height="16" viewBox="0 0 10 16"><path d="M2 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/></svg></div></div></div>`;
   };
   return header('Work<em>outs</em>') + testBar(p) + `<p class="note" style="margin-top:-4px">Tap a workout to open it.</p>` + tile('indoor') + tile('outdoor');
 }
@@ -440,9 +447,9 @@ Object.assign(LIB, {
 const TIMED = new Set(['Wall sit', 'Dead hang', 'Plank', 'Side plank', 'Hollow hold']);
 const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (_) { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) { } };
-const lKey = n => `${n}-${S.user?.id}-${TD}`;
+const lKey = n => `${n}-${S.me ? actor().id : S.user?.id}-${TD}`;
 // Lift planning is fresh every time. It is only restored while an indoor workout is actually running.
-const lAct = () => { const w = wInfo(wRow(S.user.id, TD, 'indoor')); return w.st === 'running' || w.st === 'paused' || w.st === 'done'; };
+const lAct = () => { const w = wInfo(wRow(actor().id, TD, 'indoor')); return w.st === 'running' || w.st === 'paused' || w.st === 'done'; };
 function lInit() {
   if (S.linit) return; S.linit = true;
   const sv = lAct() ? lsGet(lKey('lsess')) : null;
@@ -484,7 +491,7 @@ function syncType(ty) {
 }
 function liftPick(p, bare) {
   const W = h => bare ? h : `<div class="card">${h}</div>`;
-  const sel = lsel(), mine = p.id === S.me.id;
+  const sel = lsel(), mine = canEdit(p.id);
   if (!mine) {
     const rows = (D.sets[p.id] || []).filter(r => r.day === TD);
     const by = {}; rows.forEach(r => ((by[r.muscle] ||= {})[r.exercise] ||= []).push(r));
@@ -605,7 +612,7 @@ function startCountdown() {
 }
 function vWorkoutPage(k, p) {
   return header(k === 'indoor' ? '<em>Indoor</em>' : '<em>Outdoor</em>') + testBar(p) +
-    (S.hist && k === 'indoor' ? '' : `<div class="row" style="margin-bottom:14px"><button class="btn ghost sm" data-back="1">&lsaquo; Back to workouts</button></div>`) + (k === 'indoor' ? (p.id === S.me.id && lstep() === 'go' ? (S.hist ? liftHistory(p) : wCard(k, p) + liftSession(p)) : wCard(k, p) + liftPick(p)) : wCard(k, p));
+    (S.hist && k === 'indoor' ? '' : `<div class="row" style="margin-bottom:14px"><button class="btn ghost sm" data-back="1">&lsaquo; Back to workouts</button></div>`) + (k === 'indoor' ? (canEdit(p.id) && lstep() === 'go' ? (S.hist ? liftHistory(p) : wCard(k, p) + liftSession(p)) : wCard(k, p) + liftPick(p)) : wCard(k, p));
 }
 
 function vMeals() {
@@ -688,7 +695,7 @@ function pushCard() {
 const isDaddy = p => ['daddy', 'tyler'].includes(String(p.name).trim().toLowerCase());
 function aminoCard(p, dr) {
   if (!isDaddy(p)) return '';
-  const on = !!dr.amino, ed = editable() && p.id === S.me.id;
+  const on = !!dr.amino, ed = editable() && canEdit(p.id);
   const r = ring(130, 12, on ? 1 : 0, WATERBLUE, `<span class="num" style="font-size:30px;font-weight:800">${on ? tick : '8 oz'}</span><span class="lbl">amino</span>`);
   return `<div class="card" style="text-align:center">${ed ? `<button class="ctl" data-amino="1" style="background:none;border:0;padding:0;color:inherit" aria-label="Amino drink">${r}</button>` : r}</div>`;
 }
@@ -742,7 +749,7 @@ function progOrder() {
 }
 function vProgress() {
   if (S.view === 'split' && partner()) return splitProgress();
-  const p = viewed(), ws = D.weigh[p.id] || [], mine = p.id === S.me.id && editable();
+  const p = viewed(), ws = D.weigh[p.id] || [], mine = canEdit(p.id) && editable();
   const w1 = ws.find(x => x.day_num === 1), last = ws.length ? ws[ws.length - 1] : null;
   const start = w1 ? +w1.weight : null, cur = last ? +last.weight : null;
   const diff = start !== null && cur !== null && last !== w1 ? Math.round((cur - start) * 10) / 10 : null;
@@ -866,14 +873,14 @@ function checkSetup() {
   return true;
 }
 function checkAllRings() {
-  if (S.view === 'split' || !editable() || !ringsDone(S.me.id, TD)) return;
+  if (S.view !== 'me' || !editable() || !ringsDone(S.me.id, TD)) return;
   const key = `rings-${S.user.id}-${TD}`;
   try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (_) { return; }
   if (S.tab !== 'today' || S.sub) { S.tab = 'today'; S.sub = null; S.hist = null; $('app').scrollTo(0, 0); setTimeout(render, 0); }
 }
 function checkCelebrate() {
   const n = dayNum(S.me), key = `cel-${S.user.id}-${TD}`;
-  if (S.view === 'split' || !editable() || !complete(S.me.id, TD)) return;
+  if (S.view !== 'me' || !editable() || !complete(S.me.id, TD)) return;
   try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (_) { }
   const m = MILE[n] || MSGS[(Math.max(n, 1) + S.me.name.length) % MSGS.length];
   $('overlay').innerHTML = `<div class="over"><div class="box2"><div class="e">${n >= 1 ? 'Day ' + n + ' complete' : 'Practice day complete'}</div><div class="m">${m}</div><button class="btn" id="oc">Keep going</button></div></div>`;
@@ -942,7 +949,7 @@ document.addEventListener('click', e => { const pt = e.target.closest && e.targe
 document.addEventListener('click', async e => {
   const t = e.target.closest('button,label,[data-open],[data-pv]'); if (!t) return; const d = t.dataset;
   CTX = !!(S.me && S.calSel && S.calSel !== TD && t.closest('[data-tile=cal]'));
-  const u = S.user?.id, v = S.me && viewed();
+  const u = S.me ? actor().id : S.user?.id, v = S.me && viewed();
   if (t.id === 'pushOn') return pushEnable();
   if (t.id === 'pushOff') return pushDisable();
   if (t.id === 'pushTest') { try { const reg = await navigator.serviceWorker.ready; await reg.showNotification('Water Reminder', { body: reminderText(S.me, dailyRow(S.me.id, TD).water_oz), icon: 'icon-180.png' }); } catch (e) { toast('Could not show it: ' + e.message); } return; }
@@ -1022,11 +1029,12 @@ document.addEventListener('click', async e => {
   }
   if (d.back) { S.sub = null; $('app').scrollTo(0, 0); render(); return; }
   if (d.go) { S.tab = d.go; $('app').scrollTo(0, 0); render(); return; }
-  if (d.view) { S.view = d.view; render(); return; }
+  if (d.view) { S.view = d.view; S.linit = false; render(); return; }
   if (t.id === 'signout') { await sb.auth.signOut(); return; }
   if (d.nt !== undefined) { S.nIdx = +d.nt; render(); return; }
   if (t.id === 'notifGo') { showBanner(); return; }
   if (t.id === 'setupGo') {
+    S.view = 'me';
     const ft = parseInt($('sft').value, 10), inch = parseInt($('sin').value, 10) || 0, w = parseFloat($('swt').value), hi = ft * 12 + inch;
     if (!(ft >= 3 && ft <= 8) || !(inch >= 0 && inch <= 11) || !(hi >= 40 && hi <= 100)) { toast('Check your height.'); return; }
     if (!(w >= 50 && w <= 600)) { toast('Enter your weight in pounds.'); return; }
@@ -1118,7 +1126,7 @@ document.addEventListener('click', async e => {
     if (reps === null && !(secs > 0)) { toast('Enter reps or a time.'); return; }
     if (!(sets >= 1 && sets <= 20)) { toast('Sets must be 1 to 20.'); return; }
     const base = todaySets(u, name).length;
-    const rows = Array.from({ length: sets }, (_, k) => ({ day: TD, muscle: m, exercise: name, set_no: base + k + 1, reps, weight, seconds: secs > 0 ? secs : null }));
+    const rows = Array.from({ length: sets }, (_, k) => ({ user_id: u, day: TD, muscle: m, exercise: name, set_no: base + k + 1, reps, weight, seconds: secs > 0 ? secs : null }));
     D.sets[u] = [...(D.sets[u] || []), ...rows.map((r, k) => ({ ...r, id: 'tmp' + Date.now() + k, user_id: u }))];
     if (S.ldone) { delete S.ldone[key]; lSave(); }
     (S.shut ||= {})[key] = false; render();
@@ -1146,7 +1154,7 @@ document.addEventListener('click', async e => {
   }
   if (d.fin) { const row = wRow(u, today, d.fin); return saveWorkout({ ...row, done_at: new Date().toISOString() }); }
   if (d.amino) { const r = dailyRow(u, today), on = !!r.amino; if (!on) { S.anim = 'amino'; setTimeout(() => { S.anim = null; }, 1500); } return saveDaily(today, { amino: !on, water_oz: on ? Math.max(0, r.water_oz - 8) : r.water_oz + 8 }); }
-  if (d.jug !== undefined) { const js = jugsFor(S.me), am = dailyRow(u, today).amino ? 8 : 0, idx = +d.jug, oz = dailyRow(u, today).water_oz - am, upto = js.slice(0, idx + 1).reduce((a, b) => a + b, 0), below = js.slice(0, idx).reduce((a, b) => a + b, 0); return saveDaily(today, { water_oz: (oz >= upto ? below : upto) + am }); }
+  if (d.jug !== undefined) { const js = jugsFor(viewed()), am = dailyRow(u, today).amino ? 8 : 0, idx = +d.jug, oz = dailyRow(u, today).water_oz - am, upto = js.slice(0, idx + 1).reduce((a, b) => a + b, 0), below = js.slice(0, idx).reduce((a, b) => a + b, 0); return saveDaily(today, { water_oz: (oz >= upto ? below : upto) + am }); }
   if (d.cup) return saveDaily(today, { water_oz: dailyRow(u, today).water_oz >= 128 ? 120 : 128 });
   if (d.rclose) {
     const cur = dailyRow(u, today).pages, next = cur >= 10 ? 0 : 10, delta = next - cur;
@@ -1181,7 +1189,7 @@ document.addEventListener('change', async e => {
   if (t.dataset.wtype && S.me && S.calSel && S.calSel !== TD && t.closest('[data-tile=cal]')) { CTX = true; S.cd.type = t.value; syncType(t.value); render(); return; }
   if (t.dataset.wtype) { S.wtype[t.dataset.wtype] = t.value; if (t.dataset.wtype === 'indoor') {
     syncType(t.value); lSave();
-    const row = S.user && wRow(S.user.id, TD, 'indoor');
+    const row = S.me && wRow(actor().id, TD, 'indoor');
     if (row && !row.done_at && row.type !== t.value) { saveWorkout({ ...row, type: t.value }); return; }
     render();
   } return; }
