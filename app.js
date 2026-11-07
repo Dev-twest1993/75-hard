@@ -1262,3 +1262,11 @@ addEventListener('scroll', () => { if (scrollX) scrollTo(0, 0); });
 })();
 
 document.addEventListener('click', e => { if (e.target.closest('#imgv') && !e.target.closest('#imgv button')) $('overlay').innerHTML = ''; });
+
+// Wall display: keep an iPad-sized screen awake while the app is open.
+(function () {
+  if (!('wakeLock' in navigator) || !matchMedia('(min-width:768px)').matches) return;
+  let lock = null;
+  const get = async () => { try { lock = await navigator.wakeLock.request('screen'); } catch (_) { } };
+  get(); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') get(); });
+})();
