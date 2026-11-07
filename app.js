@@ -5,7 +5,7 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const sb = supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 
 const WLEN = 45 * 60e3, GAP = 3 * 3600e3, WATER = 128;
-const COLORS = { indoor: '#ff3b30', outdoor: '#ffd60a', water: '#30d158', reading: '#0a84ff', photo: '#f2f2f7' };   // Traffic control, with neon glow
+const COLORS = { indoor: '#ff3b30', outdoor: '#ffd60a', water: '#0a84ff', reading: '#30d158', photo: '#f2f2f7' };   // Traffic control, with neon glow
 const WATERBLUE = '#0a84ff';
 const RCOL = COLORS;
 const NAMES = { indoor: 'Indoor', outdoor: 'Outdoor', water: 'Water', reading: 'Reading', photo: 'Photo' };
@@ -38,7 +38,7 @@ let TD = ymd(new Date());
 
 // ---------- state ----------
 const S = { tab: 'today', view: 'me', user: null, me: null, wtype: {}, ovr: {}, nIdx: 0, urls: {}, dirty: false, restartSnooze: false, authMode: 'in', busy: false };
-const D = { plans: {}, profiles: [], daily: {}, workouts: {}, books: {}, weigh: {}, groceries: [], meals: {}, sets: {} };
+const D = { detail: {}, plans: {}, profiles: [], daily: {}, workouts: {}, books: {}, weigh: {}, groceries: [], meals: {}, sets: {} };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const $ = id => document.getElementById(id);
 const dkey = (u, d) => u + '|' + d;
@@ -73,7 +73,7 @@ async function loadAll() {
   D.workouts = {}; w.data.forEach(r => D.workouts[r.user_id + '|' + r.day + '|' + r.kind] = r);
   D.books = {}; b.data.forEach(r => (D.books[r.user_id] ||= []).push(r));
   D.weigh = {}; wi.data.forEach(r => (D.weigh[r.user_id] ||= []).push(r));
-  D.plans = {}; wp.data.forEach(r => D.plans[r.user_id + '|' + r.day] = r.items);
+  D.plans = {}; D.detail = {}; wp.data.forEach(r => { D.plans[r.user_id + '|' + r.day] = r.items; D.detail[r.user_id + '|' + r.day] = r.detail; });
   D.groceries = g.data;
   D.sets = {}; lf.data.forEach(r => (D.sets[r.user_id] ||= []).push(r));
   D.meals = {}; m.data.forEach(r => D.meals[r.day_idx + '|' + r.slot] = r.text);
@@ -309,6 +309,11 @@ function vToday() {
 // ---------- calendar tile ----------
 const CAL_OPTS = ['Chest', 'Triceps', 'Biceps', 'Legs', 'Back', 'Shoulders', 'Abs', 'Cardio', 'Yoga', 'Pilates', 'Treadmill', 'Cycling', 'HIIT', 'Rest day'];
 const planOf = (u, day) => D.plans[u + '|' + day] || [];
+const detailOf = (u, day) => { const d = D.detail[u + '|' + day]; return d && d.sel && d.sel.length ? d : null; };
+function detSummary(d) {
+  const lines = d.sel.map(m => `<b>${MNAME[m] || m}</b>: ${esc((d.plan[m] || []).join(', ') || 'no workouts picked')}`);
+  return (d.type === 'Lift' ? 'Lifting' : esc(d.type)) + '<br>' + lines.join('<br>');
+}
 function calTile(v) {
   const fin = ringsDone(v.id, TD);
   if (S.calTD !== TD || (fin && S.calFin !== TD)) { S.calTD = TD; S.calFin = fin ? TD : null; S.calSel = fin ? addDays(TD, 1) : TD; S.calMonth = S.calSel.slice(0, 7); }
@@ -343,16 +348,25 @@ function calTile(v) {
       : '<p class="note" style="margin:8px 0 0">Nothing planned.</p>';
   const planner = `<div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">${head}${body}</div>`;
   let go = '';
+  const det = detailOf(v.id, sel);
   if (ed && sel === TD) {
     const w = wInfo(wRow(v.id, TD, 'indoor'));
     go = `<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">${w.st === 'idle' ? liftPick(v, true) : `<div class="lbl">Today's workout</div><p class="note" style="margin:6px 0 10px">Your indoor workout is ${w.st === 'done' ? 'done' : 'in progress'}.</p><button class="btn ctl" data-calopen="1">Open workout</button>`}</div>`;
+  } else if (ed && sel > TD) {
+    if (S.cdDay !== sel) { S.cdDay = sel; S.cdEditing = null; S.cd = det ? { type: det.type, sel: det.sel.slice(), plan: JSON.parse(JSON.stringify(det.plan)), step: 'plan' } : { type: 'Lift', sel: [], plan: {}, step: 'pick' }; }
+    if (det && S.cdEditing !== sel) go = `<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px"><div class="lbl">Planned workout</div><div style="margin:8px 0 12px;font-size:14px;line-height:1.5">${detSummary(det)}</div><div class="row" style="gap:8px"><button class="btn ghost sm ctl" data-cedit="1">Edit workout</button><button class="btn ghost sm ctl" data-cdel="1">Remove</button></div></div>`;
+    else { CTX = true; const h = liftPick(v, true); CTX = false; go = `<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px"><div class="lbl" style="margin-bottom:8px">Plan this day's workout</div>${h}</div>`; }
+  } else if (det) {
+    go = `<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px"><div class="lbl">Planned workout</div><div style="margin-top:8px;font-size:14px;line-height:1.5">${detSummary(det)}</div></div>`;
   }
   return `<div class="card dtile" data-tile="cal">${GRIP}<div class="row sp" style="padding-right:44px;margin-bottom:12px"><div class="lbl">Calendar</div><div class="seg">${seg('day', 'Day')}${seg('month', 'Month')}</div></div>${main}${planner}${go}</div>`;
 }
-async function saveDayPlan(u, day, items) {
-  if (items.length) D.plans[u + '|' + day] = items; else delete D.plans[u + '|' + day];
+async function saveDayPlan(u, day, items, detail) {
+  const k = u + '|' + day, det = detail === undefined ? D.detail[k] : detail;
+  if (items.length) D.plans[k] = items; else delete D.plans[k];
+  if (det) D.detail[k] = det; else delete D.detail[k];
   render();
-  const { error } = items.length ? await sb.from('workout_plans').upsert({ user_id: u, day, items }) : await sb.from('workout_plans').delete().match({ user_id: u, day });
+  const { error } = items.length || det ? await sb.from('workout_plans').upsert({ user_id: u, day, items, detail: det || null }) : await sb.from('workout_plans').delete().match({ user_id: u, day });
   if (error) { toast(error.message); await loadAll(); render(); }
 }
 function photoTile(v) {
@@ -434,16 +448,17 @@ function lInit() {
   const sv = lAct() ? lsGet(lKey('lsess')) : null;
   S.lsel = (sv && sv.sel || []).filter(m => MNAME[m]); S.plan = (sv && sv.plan) || {}; S.lstep = (sv && sv.step) || 'pick'; S.lorder = (sv && sv.order) || []; S.ldone = (sv && sv.done) || {}; S.shut = {}; S.hist = null; S.pick = {}; S.custom = {}; S.pOther = {};
 }
-const lSave = () => lsSet(lKey('lsess'), { sel: S.lsel, plan: S.plan, step: S.lstep, order: S.lorder, done: S.ldone });
+let CTX = false;   // true while the calendar's workout builder (for another day) is being drawn or clicked
+const lSave = () => CTX ? 0 : lsSet(lKey('lsess'), { sel: S.lsel, plan: S.plan, step: S.lstep, order: S.lorder, done: S.ldone });
 function lKeys() {   // every planned lift as 'muscle|name', in the user's own drag order
   const flat = []; for (const m of lsel()) for (const n of (lplan()[m] || [])) flat.push(m + '|' + n);
   const ord = S.lorder || []; return [...ord.filter(k => flat.includes(k)), ...flat.filter(k => !ord.includes(k))];
 }
-const lsel = () => { lInit(); return S.lsel; };
-const lplan = () => { lInit(); return S.plan; };
-function lstep() { lInit(); return (S.lstep === 'go' || S.lstep === 'plan') && S.lsel.length ? S.lstep : 'pick'; }
+const lsel = () => { if (CTX) return S.cd.sel; lInit(); return S.lsel; };
+const lplan = () => { if (CTX) return S.cd.plan; lInit(); return S.plan; };
+function lstep() { if (CTX) return S.cd.step === 'plan' && S.cd.sel.length ? 'plan' : 'pick'; lInit(); return (S.lstep === 'go' || S.lstep === 'plan') && S.lsel.length ? S.lstep : 'pick'; }
 const savePlan = lSave;
-function setLstep(v) { lInit(); S.lstep = v; lSave(); }
+function setLstep(v) { if (CTX) { S.cd.step = v; return; } lInit(); S.lstep = v; lSave(); }
 const todaySets = (u, ex) => (D.sets[u] || []).filter(r => r.day === TD && r.exercise.toLowerCase() === ex.toLowerCase()).sort((a, b) => a.set_no - b.set_no);
 function lastTime(u, ex) {
   const prev = (D.sets[u] || []).filter(r => r.day < TD && r.exercise.toLowerCase() === ex.toLowerCase());
@@ -457,7 +472,13 @@ function fmtSet(r) {
   return w ? `${w} x ${r.reps}` : `${r.reps} reps`;
 }
 function syncType(ty) {
-  lInit(); const key = ty.toLowerCase();
+  const key = ty.toLowerCase();
+  if (CTX) {
+    const c = S.cd; if (ty === 'Lift') c.sel = c.sel.filter(m => LMUS.includes(m));
+    else if (c.sel.length !== 1 || c.sel[0] !== key) { c.sel = [key]; c.step = 'plan'; }
+    return;
+  }
+  lInit();
   if (ty === 'Lift') S.lsel = S.lsel.filter(m => LMUS.includes(m));
   else if (S.lsel.length !== 1 || S.lsel[0] !== key) { S.lsel = [key]; if (S.lstep === 'pick') S.lstep = 'plan'; }
 }
@@ -473,15 +494,17 @@ function liftPick(p, bare) {
   const chips = MUSCLES.map(([k, n]) => `<button data-msel="${k}" class="ctl ${sel.includes(k) ? 'on' : ''}">${n}</button>`).join('');
   const logged = (D.sets[p.id] || []).filter(r => r.day === TD).length;
   const IT = [['Lift', 'Lifting'], ['Yoga', 'Yoga'], ['Pilates', 'Pilates'], ['Treadmill', 'Treadmill'], ['Cycling', 'Cycling'], ['HIIT', 'HIIT']];
-  const live = wRow(p.id, TD, 'indoor'), busy = wInfo(live).st !== 'idle';
-  const ty = busy && IT.some(x => x[0] === live.type) ? live.type : (S.wtype.indoor || 'Lift'), lift = ty === 'Lift';
-  S.wtype.indoor = ty; syncType(ty);
+  const live = wRow(p.id, TD, 'indoor'), busy = !CTX && wInfo(live).st !== 'idle';
+  const ty = CTX ? S.cd.type : (busy && IT.some(x => x[0] === live.type) ? live.type : (S.wtype.indoor || 'Lift')), lift = ty === 'Lift';
+  if (!CTX) S.wtype.indoor = ty; syncType(ty);
+  const pdet = !CTX && !busy ? detailOf(p.id, TD) : null;
+  const plannedCard = pdet ? `<div style="border:1px solid var(--line);border-radius:16px;padding:12px;margin-bottom:16px"><div class="lbl">Planned for today</div><div style="margin:6px 0 10px;font-size:14px;line-height:1.5">${detSummary(pdet)}</div><button class="btn sm ctl" data-cstart="1">Start planned workout</button></div>` : '';
   const typeQ = `<div class="lbl" style="margin-bottom:8px">What indoor workout are we going to target?</div><select data-wtype="indoor">${IT.map(([v, n]) => `<option value="${v}" ${v === ty ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
-  if (!lift) return W(`${typeQ}${planSection()}`);
-  return W(`${typeQ}<div class="lbl" style="margin:18px 0 4px">What are we training?</div><p class="note" style="margin:0 0 4px">Pick one or more muscle groups.</p><div class="chips">${chips}</div>
+  if (!lift) return W(`${plannedCard}${typeQ}${planSection()}`);
+  return W(`${plannedCard}${typeQ}<div class="lbl" style="margin:18px 0 4px">What are we training?</div><p class="note" style="margin:0 0 4px">Pick one or more muscle groups.</p><div class="chips">${chips}</div>
     <div class="row" style="margin-top:6px"><button class="btn ctl" id="lsubmit" ${sel.length ? '' : 'disabled style="opacity:.45"'}>Next</button></div>
     ${lstep() === 'plan' ? planSection() : ''}
-    ${logged ? `<p class="note" style="margin:10px 0 0">${logged} set${logged === 1 ? '' : 's'} logged today.</p>` : ''}`);
+    ${logged && !CTX ? `<p class="note" style="margin:10px 0 0">${logged} set${logged === 1 ? '' : 's'} logged today.</p>` : ''}`);
 }
 function planSection() {
   const plan = lplan(), sel = lsel();
@@ -495,7 +518,7 @@ function planSection() {
   const total = sel.reduce((n, m) => n + (plan[m] || []).length, 0);
   return `<div style="border-top:1px solid var(--line);margin-top:18px;padding-top:16px"><div class="lbl">${(S.wtype.indoor || 'Lift') === 'Lift' ? 'Pick your lifts' : 'Pick your workouts'}</div><p class="note" style="margin:6px 0 0">${(S.wtype.indoor || 'Lift') === 'Lift' ? 'Tap every lift you want to do for each muscle group.' : 'Tap every workout you want to do. Use + Other for your own.'}</p>
     ${sel.map(block).join('')}
-    <div class="row" style="margin-top:18px"><button class="btn ctl" id="lgo" ${total ? '' : 'disabled style="opacity:.45"'}>Let's get after it!</button></div></div>`;
+    <div class="row" style="margin-top:18px"><button class="btn ctl" id="${CTX ? 'csave' : 'lgo'}" ${total ? '' : 'disabled style="opacity:.45"'}>${CTX ? 'Save workout' : 'Let\'s get after it!'}</button></div></div>`;
 }
 function lastSummary(rows) {   // just the headline number from the previous session
   const w = Math.max(0, ...rows.map(r => +r.weight || 0)); if (w > 0) return `${w} lb`;
@@ -727,7 +750,7 @@ function vProgress() {
   const n = dayNum(p);
   const photoOf = d => D.daily[dkey(p.id, d)]?.photo_path;
   const todayPh = photoOf(TD), done = !!todayPh;
-  const cells = Array.from({ length: 75 }, (_, i) => { const dd = addDays(p.start_date, i), ph = photoOf(dd); const u = ph && S.urls[ph]; return `<div class="${ph ? 'has' : ''} thumb" ${u ? `data-view="${esc(ph)}" data-cap="Day ${i + 1} &middot; ${pretty(dd)}" style="background-image:url('${u}')"` : ''}>${i + 1}</div>`; }).join('');
+  const cells = Array.from({ length: 75 }, (_, i) => { const dd = addDays(p.start_date, i), ph = photoOf(dd); const u = ph && S.urls[ph]; return `<div class="${ph ? 'has' : ''} thumb" ${u ? `data-pv="${esc(ph)}" data-cap="Day ${i + 1} &middot; ${pretty(dd)}" style="background-image:url('${u}')"` : ''}>${i + 1}</div>`; }).join('');
   const due = CHECKS.find(c => n >= c && !ws.some(x => x.day_num === c));
   const slots = CHECKS.map(c => {
     const rec = ws.find(x => x.day_num === c), open = n >= c || c === 10;   // TEMP: Day 10 open for testing
@@ -810,6 +833,7 @@ const VIEWS = { today: vToday, workouts: vWorkouts, meals: vMeals, water: vWater
 
 // ---------- render ----------
 function render() {
+  CTX = false;
   if (S.dragging) return;
   const app = $('app'), nav = $('nav');
   if (!S.user) { nav.hidden = true; app.className = ''; app.innerHTML = vAuth(); return; }
@@ -916,15 +940,16 @@ document.addEventListener('submit', async e => {
 });
 document.addEventListener('click', e => { const pt = e.target.closest && e.target.closest('.hpt'); if (pt && S._hp) { const n = $('hnote'); if (n) n.textContent = S._hp[+pt.dataset.hi]; } });
 document.addEventListener('click', async e => {
-  const t = e.target.closest('button,label,[data-open],[data-view]'); if (!t) return; const d = t.dataset;
+  const t = e.target.closest('button,label,[data-open],[data-pv]'); if (!t) return; const d = t.dataset;
+  CTX = !!(S.me && S.calSel && S.calSel !== TD && t.closest('[data-tile=cal]'));
   const u = S.user?.id, v = S.me && viewed();
   if (t.id === 'pushOn') return pushEnable();
   if (t.id === 'pushOff') return pushDisable();
   if (t.id === 'pushTest') { try { const reg = await navigator.serviceWorker.ready; await reg.showNotification('Water Reminder', { body: reminderText(S.me, dailyRow(S.me.id, TD).water_oz), icon: 'icon-180.png' }); } catch (e) { toast('Could not show it: ' + e.message); } return; }
   if (t.id === 'atoggle') { S.authMode = S.authMode === 'up' ? 'in' : 'up'; render(); return; }
   if (!S.me) return;
-  if (d.view) {
-    const url = S.urls[d.view]; if (!url) { toast('Photo is still loading.'); return; }
+  if (d.pv) {
+    const url = S.urls[d.pv]; if (!url) { toast('Photo is still loading.'); return; }
     $('overlay').innerHTML = `<div class="over" id="imgv" style="flex-direction:column;gap:14px;padding:16px"><div style="color:var(--text);font-weight:700">${esc(d.cap || '')}</div><img src="${url}" alt="Progress photo" style="max-width:100%;max-height:78vh;border-radius:16px;object-fit:contain"><button class="btn" id="imgx">Close</button></div>`; return;
   }
   if (t.id === 'imgx' || t.id === 'imgv') { $('overlay').innerHTML = ''; return; }
@@ -953,6 +978,26 @@ document.addEventListener('click', async e => {
   }
   if (d.msel) { const sel = lsel(), i = sel.indexOf(d.msel); if (i >= 0) sel.splice(i, 1); else sel.push(d.msel); lSave(); render(); return; }
   if (t.id === 'lsubmit') { if (!lsel().length) return; setLstep('plan'); render(); return; }
+  if (t.id === 'csave') {
+    if (!editable()) return;
+    const c = S.cd, day = S.calSel, plan = {}; c.sel.forEach(m => { plan[m] = (c.plan[m] || []).slice(); });
+    if (!c.sel.some(m => plan[m].length)) { toast('Pick at least one workout first.'); return; }
+    const det = { type: c.type, sel: c.sel.slice(), plan }, labels = c.type === 'Lift' ? c.sel.map(m => MNAME[m]) : [c.type];
+    const items = planOf(u, day).slice(); labels.forEach(l => { if (!items.includes(l)) items.push(l); });
+    S.cdEditing = null; CTX = false; saveDayPlan(u, day, items, det); toast('Workout saved for ' + pretty(day) + '.'); return;
+  }
+  if (d.cedit) { const det = detailOf(u, S.calSel); if (!det) return; S.cd = { type: det.type, sel: det.sel.slice(), plan: JSON.parse(JSON.stringify(det.plan)), step: 'plan' }; S.cdEditing = S.calSel; S.cdDay = S.calSel; render(); return; }
+  if (d.cdel) { if (!editable()) return; saveDayPlan(u, S.calSel, planOf(u, S.calSel), null); return; }
+  if (d.cstart) {
+    if (!editable()) return;
+    const det = detailOf(u, TD); if (!det) return;
+    if (wInfo(wRow(u, TD, 'outdoor')).st === 'running' || wInfo(wRow(u, TD, 'outdoor')).st === 'paused') { toast('Finish your outdoor workout first.'); return; }
+    const idle = wInfo(wRow(u, TD, 'indoor')).st === 'idle';
+    lInit(); S.wtype.indoor = det.type; S.lsel = det.sel.slice(); S.plan = JSON.parse(JSON.stringify(det.plan)); S.lorder = []; S.ldone = {}; S.shut = {}; S.hist = null; S.lstep = 'go'; lSave();
+    S.tab = 'workouts'; S.sub = 'indoor'; $('app').scrollTo(0, 0); render();
+    if (idle) startCountdown();
+    return;
+  }
   if (t.id === 'lgo') {
     if (!editable() || !lsel().length) return;
     const w = wInfo(wRow(u, TD, 'indoor')), o = wInfo(wRow(u, TD, 'outdoor'));
@@ -1133,6 +1178,7 @@ document.addEventListener('click', async e => {
 });
 document.addEventListener('change', async e => {
   const t = e.target;
+  if (t.dataset.wtype && S.me && S.calSel && S.calSel !== TD && t.closest('[data-tile=cal]')) { CTX = true; S.cd.type = t.value; syncType(t.value); render(); return; }
   if (t.dataset.wtype) { S.wtype[t.dataset.wtype] = t.value; if (t.dataset.wtype === 'indoor') {
     syncType(t.value); lSave();
     const row = S.user && wRow(S.user.id, TD, 'indoor');
