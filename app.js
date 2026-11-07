@@ -168,6 +168,7 @@ async function uploadPhoto(file, date) {
 }
 async function ensureUrls() {
   const need = new Set();
+  Object.values(D.daily).forEach(r => { if (r.photo_path && !S.urls[r.photo_path]) need.add(r.photo_path); });
   [S.me, partner()].filter(Boolean).forEach(p => { for (let i = 0; i < 75; i++) { const r = D.daily[dkey(p.id, addDays(p.start_date, i))]; if (r?.photo_path && !S.urls[r.photo_path]) need.add(r.photo_path); } });
   if (!need.size) return;
   const { data } = await sb.storage.from('progress-photos').createSignedUrls([...need], 3600);
@@ -356,7 +357,7 @@ async function saveDayPlan(u, day, items) {
 function photoTile(v) {
   const done = !!dailyRow(v.id, TD).photo_path, ed = editable() && v.id === S.me.id;
   const r = ring(130, 12, done ? 1 : 0, COLORS.photo, `<span class="num" style="font-size:26px;font-weight:800">${done ? tick : '+'}</span><span class="lbl">${done ? 'photo done' : 'add photo'}</span>`);
-  return `<div class="card dtile" data-tile="photo">${GRIP}<div class="lbl" style="margin-bottom:12px">Progress photo</div><div class="big">${ed ? `<button class="ctl" data-phopen="1" style="background:none;border:0;padding:0;color:inherit" aria-label="Take or choose today's photo">${r}</button>` : r}</div><p class="note" style="text-align:center;margin:10px 0 0">${done ? 'Photo added. Tap the ring to replace it.' : 'Tap the ring to take or choose today\'s photo.'}</p></div>`;
+  return `<div class="card dtile" data-tile="photo">${GRIP}<div class="lbl" style="margin-bottom:12px">Progress photo</div><div class="big">${ed ? `<button class="ctl" data-phopen="1" style="background:none;border:0;padding:0;color:inherit" aria-label="Take or choose today's photo">${r}</button>` : r}</div><p class="note" style="text-align:center;margin:10px 0 0">${done ? 'Saved to your Progress page. Tap the ring to replace it.' : 'Tap the ring to take or choose today\'s photo.'}</p>${done && ed ? '<div class="row" style="justify-content:center;margin-top:12px"><button class="btn amber sm ctl" data-phundo="1">Undo</button></div>' : ''}</div>`;
 }
 function readTile(v) {
   const pages = dailyRow(v.id, TD).pages, done = pages >= 10, ed = editable() && v.id === S.me.id;
@@ -612,7 +613,7 @@ function celebrate(big, sub) {
   if (!$('partyCss')) { const st = document.createElement('style'); st.id = 'partyCss'; st.textContent = '@keyframes pfade{from{opacity:0}to{opacity:1}}@keyframes ppop{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}'; document.head.appendChild(st); }
   document.body.appendChild(el);
   const cv = el.querySelector('canvas'), dpr = window.devicePixelRatio || 1, W = cv.width = innerWidth * dpr, H = cv.height = innerHeight * dpr, cx = cv.getContext('2d');
-  const cols = ['#2fd98f', '#c9e25f', '#ffffff', '#3ecbff', '#ffd166'];
+  const cols = [...Object.values(COLORS), '#ffffff'];
   const bits = Array.from({ length: 140 }, () => ({ x: Math.random() * W, y: -Math.random() * H * .6, w: (5 + Math.random() * 7) * dpr, h: (8 + Math.random() * 10) * dpr, vy: (2 + Math.random() * 4) * dpr, vx: (Math.random() - .5) * 3 * dpr, r: Math.random() * 6, vr: (Math.random() - .5) * .3, c: cols[Math.floor(Math.random() * cols.length)] }));
   let raf; const t0 = Date.now();
   const step = () => { cx.clearRect(0, 0, W, H); for (const b of bits) { b.x += b.vx; b.y += b.vy; b.r += b.vr; cx.save(); cx.translate(b.x, b.y); cx.rotate(b.r); cx.fillStyle = b.c; cx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h); cx.restore(); } if (Date.now() - t0 < 5000) raf = requestAnimationFrame(step); };
@@ -670,11 +671,13 @@ function aminoCard(p, dr) {
 function vWater() {
   if (S.view === 'split' && partner()) return splitWater();
   const p = viewed(), dr = dailyRow(p.id, TD), oz = dr.water_oz, am = dr.amino ? 8 : 0, WC = COLORS.water, js = jugsFor(p), tea = p.water_style === 'teacup';
-  let used = 0; const items = js.map((sz, i) => { used += sz; return { sz, i, filled: oz - am >= used }; });
-  const jugSvg = (sz, filled) => { const w = sz === 40 ? 56 : 44, h = sz === 40 ? 96 : 76;
-    return `<svg width="${w}" height="${h}" viewBox="0 0 56 96"><rect x="20" y="2" width="16" height="8" rx="3" fill="none" stroke="${WC}" stroke-width="2"/><rect x="6" y="12" width="44" height="82" rx="14" fill="${filled ? WC : 'transparent'}" fill-opacity=".85" stroke="${WC}" stroke-width="2.5" style="filter:drop-shadow(0 0 ${filled ? 9 : 2}px ${WC})"/></svg>`; };
+  let used = 0; const items = js.map((sz, i) => { used += sz; return { sz, i, filled: (isDaddy(p) && js.length === 4 && i === 3) ? !!am : oz - am >= used }; });
+  const jugSvg = (sz, filled, anim) => { const w = sz === 40 ? 56 : 44, h = sz === 40 ? 96 : 76;
+    const body = anim ? 'transparent' : (filled ? WC : 'transparent');
+    return `<svg width="${w}" height="${h}" viewBox="0 0 56 96"><rect x="20" y="2" width="16" height="8" rx="3" fill="none" stroke="${WC}" stroke-width="2"/>${anim ? `<rect class="liquid" x="6" y="12" width="44" height="82" rx="14" fill="${WC}" fill-opacity=".85"/>` : ''}<rect x="6" y="12" width="44" height="82" rx="14" fill="${body}" fill-opacity=".85" stroke="${WC}" stroke-width="2.5" style="filter:drop-shadow(0 0 ${filled ? 9 : 2}px ${WC})"/></svg>`; };
   const cup = f => `<svg width="56" height="64" viewBox="0 0 56 64"><path d="M8 18h34v20a14 14 0 01-14 14h-6A14 14 0 018 38z" fill="${f ? WC : 'transparent'}" fill-opacity=".85" stroke="${WC}" stroke-width="2.5" style="filter:drop-shadow(0 0 ${f ? 9 : 2}px ${WC})"/><path d="M42 24h4a6 6 0 010 14h-5" fill="none" stroke="${WC}" stroke-width="2.5"/><path d="M18 8c-2 3 2 4 0 7M28 8c-2 3 2 4 0 7" fill="none" stroke="${WC}" stroke-width="2" stroke-linecap="round" opacity=".7"/></svg>`;
-  const jugBtns = items.map(x => `<button class="jug ctl" data-jug="${x.i}">${jugSvg(x.sz, x.filled)}<span>${x.sz} OZ</span></button>`).join('');
+  const aj = isDaddy(p) && js.length === 4;
+  const jugBtns = items.map(x => { const am8 = aj && x.i === 3; return `<button class="jug ctl" ${am8 ? 'data-amino="1"' : `data-jug="${x.i}"`}>${jugSvg(x.sz, x.filled, am8 && S.anim === 'amino' && x.filled)}<span>${x.sz} OZ${am8 ? ' &middot; AMINO' : ''}</span></button>`; }).join('');
   const cupBtn = tea ? `<button class="jug ctl" data-cup="1">${cup(oz >= 128)}<span>TEA &middot; 8 OZ</span></button>` : '';
   return header('<em>Water</em>') + testBar(p) + `<div class="card" style="text-align:center">${ring(176, 12, Math.min(oz / WATER, 1), WC, `<span class="num" style="font-size:40px;font-weight:800">${oz}</span><span class="lbl">of 128 oz</span>`)}
    <div class="jugs">${jugBtns}${cupBtn}</div><p class="note">Tap each jug when you finish it.${tea ? ' Your last 8 oz is the tea at night.' : ''}</p></div>
@@ -716,7 +719,9 @@ function vProgress() {
   const n = dayNum(p);
   const photoOf = d => D.daily[dkey(p.id, d)]?.photo_path;
   const todayPh = photoOf(TD), done = !!todayPh;
-  const cells = Array.from({ length: 75 }, (_, i) => { const ph = photoOf(addDays(p.start_date, i)); const u = ph && S.urls[ph]; return `<div class="${ph ? 'has' : ''} thumb" ${u ? `style="background-image:url('${u}')"` : ''}>${i + 1}</div>`; }).join('');
+  const cells = Array.from({ length: 75 }, (_, i) => { const dd = addDays(p.start_date, i), ph = photoOf(dd); const u = ph && S.urls[ph]; return `<div class="${ph ? 'has' : ''} thumb" ${u ? `data-view="${esc(ph)}" data-cap="Day ${i + 1} &middot; ${pretty(dd)}" style="background-image:url('${u}')"` : ''}>${i + 1}</div>`; }).join('');
+  const prac = Object.values(D.daily).filter(r => r.user_id === p.id && r.photo_path && r.day < p.start_date).sort((a, b) => a.day < b.day ? -1 : 1);
+  const pracHtml = prac.length ? `<div class="lbl" style="margin:14px 0 8px">Practice photos</div><div class="grid75">${prac.map(r => { const u = S.urls[r.photo_path]; return `<div class="has thumb" ${u ? `data-view="${esc(r.photo_path)}" data-cap="Practice &middot; ${pretty(r.day)}" style="background-image:url('${u}')"` : ''}>${pretty(r.day).split(' ')[1] || ''}</div>`; }).join('')}</div>` : '';
   const due = CHECKS.find(c => n >= c && !ws.some(x => x.day_num === c));
   const slots = CHECKS.map(c => {
     const rec = ws.find(x => x.day_num === c), open = n >= c || c === 10;   // TEMP: Day 10 open for testing
@@ -732,7 +737,7 @@ function vProgress() {
    </div>
    <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px"><div class="lbl">Weigh-ins &middot; every 10 days</div>${due ? `<p style="margin:8px 0 0;font-size:15px"><b>Day ${due} weigh-in is due.</b> Step on the scale and log it below.</p>` : ''}${slots}</div>
    ${chart(p)}</div>`,
-    days: `<div class="card dtile" data-tile="days"><div style="padding-right:44px" class="lbl">All 75 days</div>${GRIP}<div class="grid75" style="margin-top:10px">${cells}</div></div>`
+    days: `<div class="card dtile" data-tile="days"><div style="padding-right:44px" class="lbl">All 75 days</div>${GRIP}<div class="grid75" style="margin-top:10px">${cells}</div>${pracHtml}</div>`
   };
   return header('<em>Progress</em>') + `<div id="ptiles" data-dragbox="progress">${progOrder().map(k => tiles[k]).join('')}</div>`;
 }
@@ -905,13 +910,23 @@ document.addEventListener('submit', async e => {
 });
 document.addEventListener('click', e => { const pt = e.target.closest && e.target.closest('.hpt'); if (pt && S._hp) { const n = $('hnote'); if (n) n.textContent = S._hp[+pt.dataset.hi]; } });
 document.addEventListener('click', async e => {
-  const t = e.target.closest('button,label,[data-open]'); if (!t) return; const d = t.dataset;
+  const t = e.target.closest('button,label,[data-open],[data-view]'); if (!t) return; const d = t.dataset;
   const u = S.user?.id, v = S.me && viewed();
   if (t.id === 'pushOn') return pushEnable();
   if (t.id === 'pushOff') return pushDisable();
   if (t.id === 'pushTest') { try { const reg = await navigator.serviceWorker.ready; await reg.showNotification('Water Reminder', { body: reminderText(S.me, dailyRow(S.me.id, TD).water_oz), icon: 'icon-180.png' }); } catch (e) { toast('Could not show it: ' + e.message); } return; }
   if (t.id === 'atoggle') { S.authMode = S.authMode === 'up' ? 'in' : 'up'; render(); return; }
   if (!S.me) return;
+  if (d.view) {
+    const url = S.urls[d.view]; if (!url) { toast('Photo is still loading.'); return; }
+    $('overlay').innerHTML = `<div class="over" id="imgv" style="flex-direction:column;gap:14px;padding:16px"><div style="color:var(--text);font-weight:700">${esc(d.cap || '')}</div><img src="${url}" alt="Progress photo" style="max-width:100%;max-height:78vh;border-radius:16px;object-fit:contain"><button class="btn" id="imgx">Close</button></div>`; return;
+  }
+  if (t.id === 'imgx' || t.id === 'imgv') { $('overlay').innerHTML = ''; return; }
+  if (d.phundo) {
+    const path = dailyRow(u, TD).photo_path; if (!path) return;
+    S.urls[path] = null; await saveDaily(TD, { photo_path: null });
+    sb.storage.from('progress-photos').remove([path]); toast('Photo removed.'); return;
+  }
   if (d.phopen) { if (editable()) $('ph').click(); return; }
   if (d.tab) { S.tab = d.tab; S.sub = null; $('app').scrollTo(0, 0); render(); return; }
   if (d.calopen) { S.tab = 'workouts'; S.sub = 'indoor'; $('app').scrollTo(0, 0); render(); return; }
@@ -1079,7 +1094,7 @@ document.addEventListener('click', async e => {
     return saveWorkout({ user_id: u, day: today, kind: d.late, type: S.wtype[d.late] || types[0], started_at: new Date(+end - WLEN).toISOString(), done_at: end.toISOString(), override: false });
   }
   if (d.fin) { const row = wRow(u, today, d.fin); return saveWorkout({ ...row, done_at: new Date().toISOString() }); }
-  if (d.amino) { const r = dailyRow(u, today), on = !!r.amino; return saveDaily(today, { amino: !on, water_oz: on ? Math.max(0, r.water_oz - 8) : r.water_oz + 8 }); }
+  if (d.amino) { const r = dailyRow(u, today), on = !!r.amino; if (!on) { S.anim = 'amino'; setTimeout(() => { S.anim = null; }, 1500); } return saveDaily(today, { amino: !on, water_oz: on ? Math.max(0, r.water_oz - 8) : r.water_oz + 8 }); }
   if (d.jug !== undefined) { const js = jugsFor(S.me), am = dailyRow(u, today).amino ? 8 : 0, idx = +d.jug, oz = dailyRow(u, today).water_oz - am, upto = js.slice(0, idx + 1).reduce((a, b) => a + b, 0), below = js.slice(0, idx).reduce((a, b) => a + b, 0); return saveDaily(today, { water_oz: (oz >= upto ? below : upto) + am }); }
   if (d.cup) return saveDaily(today, { water_oz: dailyRow(u, today).water_oz >= 128 ? 120 : 128 });
   if (d.rclose) {
@@ -1183,3 +1198,15 @@ if (window.visualViewport) {
   visualViewport.addEventListener('resize', snap); visualViewport.addEventListener('scroll', snap);
 }
 addEventListener('scroll', () => { if (scrollX) scrollTo(0, 0); });
+
+// Self-update: if a newer version of the app was published, jump to it (GitHub Pages can serve old files for a few minutes).
+(async () => {
+  try {
+    const mine = document.querySelector('meta[name=app-version]')?.content; if (!mine) return;
+    const html = await (await fetch('./?nocache=' + Date.now(), { cache: 'no-store' })).text();
+    const theirs = (html.match(/name="app-version" content="([^"]+)"/) || [])[1];
+    if (theirs && theirs !== mine && sessionStorage.getItem('upd') !== theirs) { sessionStorage.setItem('upd', theirs); location.replace(location.pathname + '?v=' + encodeURIComponent(theirs)); }
+  } catch (_) { }
+})();
+
+document.addEventListener('click', e => { if (e.target.closest('#imgv') && !e.target.closest('#imgv button')) $('overlay').innerHTML = ''; });

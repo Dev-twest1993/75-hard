@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="app-version" content="2026-11-06c">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -120,6 +121,7 @@ select,input[type=text],input[type=number],input[type=password]{background:rgba(
 .groc.done span{text-decoration:line-through;color:var(--dim)}
 .bar{height:8px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden;margin-top:8px}
 .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));border-radius:99px}
+.thumb.has{cursor:pointer}
 .grid75{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}
 .grid75 div{aspect-ratio:1;border-radius:9px;background:rgba(255,255,255,.04);border:1px solid var(--line);font-size:10px;color:var(--dim);display:flex;align-items:center;justify-content:center;background-size:cover;background-position:center;font-weight:600}
 .grid75 div.has{border-color:rgba(47,217,143,.6);color:#fff;background-color:rgba(47,217,143,.4)}
@@ -170,6 +172,8 @@ input[type=range]{width:100%;accent-color:#2fd98f;margin-top:12px}
 .xbtn{background:none;border:0;color:var(--dim);font-size:20px;padding:0 4px}
 textarea{background:rgba(0,0,0,.35);border:1px solid var(--line);color:var(--text);border-radius:14px;padding:12px;font-size:15px;width:100%;font-family:inherit}
 .thumb{background-size:cover;background-position:center}
+@keyframes jugfill{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.liquid{transform-box:fill-box;transform-origin:50% 100%;animation:jugfill .9s ease-out both}
 </style>
 </head>
 <body>
@@ -180,6 +184,6 @@ textarea{background:rgba(0,0,0,.35);border:1px solid var(--line);color:var(--tex
 <div class="banner" id="banner"></div>
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=2026-11-06c"></script>
 </body>
 </html>
