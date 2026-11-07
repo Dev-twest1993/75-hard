@@ -289,7 +289,7 @@ function vToday() {
     const col = p => { const done = complete(p.id, TD);
       return `<div class="p"><h3>${esc(p.name)}</h3>${allRings(p.id, { size: RS, stroke: RS < 150 ? 9 : 11, step: RS < 150 ? 11 : 14 })}
       <div style="margin-top:10px"><span class="badge ${done ? 'good' : ''}">${done ? 'Day complete' : 'In progress'}</span></div></div>`; };
-    return header('Today') + `<div class="card" style="text-align:center"><div class="big">${ring(200, 12, c.frac, '#00e676', `<span class="days" style="font-size:64px">${c.left}</span><span class="dayslbl">${c.sub}</span>`)}</div></div><div class="split">${col(S.me)}${col(pr)}</div>
+    return header('Today') + `<div class="card" style="text-align:center${WIDE() ? '' : ';padding:12px'}"><div class="big">${ring(WIDE() ? 200 : 140, WIDE() ? 12 : 10, c.frac, '#00e676', `<span class="days" style="font-size:${WIDE() ? 64 : 44}px">${c.left}</span><span class="dayslbl">${c.sub}</span>`)}</div></div><div class="split">${col(S.me)}${col(pr)}</div>
       <p class="note" style="margin-top:12px">Live view. When ${esc(pr.name)} checks something off, it shows up here.</p>`;
   }
   const f = rings(v.id, TD), c = dayCounter(v);
