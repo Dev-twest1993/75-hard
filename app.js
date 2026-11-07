@@ -6,6 +6,7 @@ const sb = supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true,
 
 const WLEN = 45 * 60e3, GAP = 3 * 3600e3, WATER = 128;
 const COLORS = { indoor: '#2fd98f', outdoor: '#c9e25f', water: '#4fc8e6', reading: '#e8cf8a', photo: '#e9a36b' };
+const RCOL = { indoor: '#ff4d8d', outdoor: '#ffb020', water: '#35c6ff', reading: '#a78bfa', photo: '#3ddc97' };
 const NAMES = { indoor: 'Indoor', outdoor: 'Outdoor', water: 'Water', reading: 'Reading', photo: 'Photo' };
 const MSGS = [
   'Look at you. Every box closed. That is what showing up looks like.',
@@ -184,14 +185,14 @@ let ARC_LAST = {}, ARC_TAB = null;
 const lite = (hex, a) => { const n = parseInt(hex.slice(1), 16), m = x => Math.round(x + (255 - x) * a); return `rgb(${m(n >> 16)},${m(n >> 8 & 255)},${m(n & 255)})`; };
 function allRings(u, o = {}) {
   const f = rings(u, TD), keys = Object.keys(NAMES), size = o.size || 300, stroke = o.stroke || 22, step = o.step || stroke + 3, c0 = size / 2;
-  const defs = keys.map(k => `<linearGradient id="g-${u}-${k}-${size}" gradientUnits="userSpaceOnUse" x1="0" y1="${size}" x2="${size}" y2="0"><stop offset="0" stop-color="${COLORS[k]}"/><stop offset="1" stop-color="${lite(COLORS[k], .28)}"/></linearGradient>`).join('');
+  const defs = keys.map(k => `<linearGradient id="g-${u}-${k}-${size}" gradientUnits="userSpaceOnUse" x1="0" y1="${size}" x2="${size}" y2="0"><stop offset="0" stop-color="${RCOL[k]}"/><stop offset="1" stop-color="${lite(RCOL[k], .28)}"/></linearGradient>`).join('');
   const svg = keys.map((k, i) => {
     const r = (size - stroke) / 2 - i * step, c = 2 * Math.PI * r, last = ARC_LAST[u + k] || 0;
     return `<circle cx="${c0}" cy="${c0}" r="${r}" fill="none" stroke="#04100a" stroke-width="${stroke + 4}"/>` +
-      `<circle cx="${c0}" cy="${c0}" r="${r}" fill="none" stroke="${COLORS[k]}" stroke-opacity=".16" stroke-width="${stroke}"/>` +
+      `<circle cx="${c0}" cy="${c0}" r="${r}" fill="none" stroke="${RCOL[k]}" stroke-opacity=".16" stroke-width="${stroke}"/>` +
       `<circle class="arc" data-arc="${u + k}" data-f="${Math.max(f[k], .001)}" data-c="${c}" style="transition-delay:${i * 120}ms;filter:drop-shadow(0 0 2.5px rgba(0,0,0,.6))" cx="${c0}" cy="${c0}" r="${r}" fill="none" stroke="url(#g-${u}-${k}-${size})" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - Math.max(last, .001))}"/>`;
   }).join('');
-  const legend = o.legend === false ? '' : `<div class="arclegend">${keys.map(k => `<div class="lg"><i style="background:${COLORS[k]}"></i><span>${NAMES[k]}</span><b>${Math.round(f[k] * 100)}%</b></div>`).join('')}</div>`;
+  const legend = o.legend === false ? '' : `<div class="arclegend">${keys.map(k => `<div class="lg"><i style="background:${RCOL[k]}"></i><span>${NAMES[k]}</span><b>${Math.round(f[k] * 100)}%</b></div>`).join('')}</div>`;
   return `<div class="big"><span class="ringwrap" style="width:${size}px;height:${size}px"><svg width="${size}" height="${size}" style="transform:rotate(-90deg)"><defs>${defs}</defs>${svg}</svg></span></div>${legend}`;
 }
 function animateArcs() {
@@ -233,7 +234,7 @@ function testBar(p) { return dayNum(p) < 1 ? `<div class="roBar" style="color:va
 function dietBtn(p) { const r = dailyRow(p.id, TD); return `<button class="check ctl" id="diet"><span class="box ${r.diet ? 'on' : ''}">${r.diet ? tick : ''}</span><span>No cheat meals. No alcohol.</span></button>`; }
 
 const GRIP = '<button class="grip" aria-label="Drag to reorder"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></button>';
-const TILE_IDS = ['days', 'all', 'single', 'cal', 'reading'];
+const TILE_IDS = ['days', 'all', 'single', 'cal', 'reading', 'photo'];
 function tileOrder() {
   try {
     let o = JSON.parse(localStorage.getItem('tileOrder'));
@@ -263,6 +264,7 @@ document.addEventListener('pointerdown', e => {
     window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
     if (j !== i) {
       if (box.dataset.dragbox === 'lifts') { const o = lKeys(); const [m] = o.splice(i, 1); o.splice(j, 0, m); S.lorder = o; lSave(); }
+      else if (box.dataset.dragbox === 'progress') { const o = progOrder(); const [m] = o.splice(i, 1); o.splice(j, 0, m); try { localStorage.setItem('progOrder', JSON.stringify(o)); } catch (_) { } }
       else { const o = tileOrder(); const [m] = o.splice(i, 1); o.splice(j, 0, m); saveTileOrder(o); }
     }
     S.dragging = false; render();
@@ -294,6 +296,7 @@ function vToday() {
         ? `<div class="card dtile" data-tile="all">${GRIP}${allRings(v.id)}</div>`
         : k === 'cal' ? calTile(v)
         : k === 'reading' ? readTile(v)
+        : k === 'photo' ? photoTile(v)
         : `<div class="card dtile" data-tile="single">${GRIP}<div class="lbl" style="margin-bottom:14px">Today's rings</div><div class="rings">${small}</div></div>`).join('')}</div>
     <div style="height:14px"></div>${other}
     <div style="text-align:center;margin-top:8px"><button class="link" id="signout">Sign out</button></div>`;
@@ -348,6 +351,11 @@ async function saveDayPlan(u, day, items) {
   const { error } = items.length ? await sb.from('workout_plans').upsert({ user_id: u, day, items }) : await sb.from('workout_plans').delete().match({ user_id: u, day });
   if (error) { toast(error.message); await loadAll(); render(); }
 }
+function photoTile(v) {
+  const done = !!dailyRow(v.id, TD).photo_path, ed = editable() && v.id === S.me.id;
+  const r = ring(130, 12, done ? 1 : 0, COLORS.photo, `<span class="num" style="font-size:26px;font-weight:800">${done ? tick : '+'}</span><span class="lbl">${done ? 'photo done' : 'add photo'}</span>`);
+  return `<div class="card dtile" data-tile="photo">${GRIP}<div class="lbl" style="margin-bottom:12px">Progress photo</div><div class="big">${ed ? `<label for="ph" class="ctl" style="display:block;cursor:pointer">${r}</label>` : r}</div><p class="note" style="text-align:center;margin:10px 0 0">${done ? 'Photo added. Tap the ring to replace it.' : 'Tap the ring to take or choose today\'s photo.'}</p></div>`;
+}
 function readTile(v) {
   const pages = dailyRow(v.id, TD).pages, done = pages >= 10, ed = editable() && v.id === S.me.id;
   const r = ring(130, 12, Math.min(pages / 10, 1), COLORS.reading, `<span class="num" style="font-size:30px;font-weight:800">${pages}</span><span class="lbl">of 10 pages</span>`);
@@ -371,7 +379,7 @@ function wCard(k, p) {
   else if (w.st === 'running' || w.st === 'paused') {
     const ps = w.st === 'paused', mine = p.id === S.me.id;
     body = `<div class="timer" id="t-${k}">${mmss(w.left)}</div><div class="note">${esc(row.type)} ${ps ? 'is paused. The clock is stopped.' : 'in progress. It closes on its own at 45 minutes.'}</div>` +
-      (mine ? `<div class="lbtns"><button class="btn sm amber" data-${ps ? 'resume' : 'pause'}="${k}">${ps ? 'Resume' : 'Pause'}</button><button class="btn sm blue" data-restart="${k}">Restart Counter</button>${k === 'indoor' ? '<button class="btn sm violet" data-lplan="1">Modify/Add Workouts</button>' : `<button class="btn sm red" data-stop="${k}">Stop</button>`}<button class="btn sm" data-fin="${k}">Complete Workout</button>${k === 'indoor' ? '<div style="grid-column:1/-1;display:flex;justify-content:center"><button class="btn sm red" data-wreset="indoor">Plan a new workout</button></div>' : ''}</div>` : '');
+      (mine ? `<div class="lbtns"><button class="btn sm amber" data-${ps ? 'resume' : 'pause'}="${k}">${ps ? 'Resume' : 'Pause'}</button><button class="btn sm blue" data-restart="${k}">Restart Timer</button>${k === 'indoor' ? '<button class="btn sm violet" data-lplan="1">Modify/Add Workouts</button>' : `<button class="btn sm red" data-stop="${k}">Stop</button>`}<button class="btn sm" data-fin="${k}">Complete Workout</button>${k === 'indoor' ? '<div style="grid-column:1/-1;display:flex;justify-content:center"><button class="btn sm red" data-wreset="indoor">Plan a new workout</button></div>' : ''}</div>` : '');
   }
   else if (other.st === 'running' || other.st === 'paused') body = `<div class="note">Finish your other workout first.</div>`;
   else body = `<select data-wtype="${k}">${types.map(t => `<option ${t === (S.wtype[k] || types[0]) ? 'selected' : ''}>${t}</option>`).join('')}</select><div class="row" style="margin-top:14px"><button class="btn" data-start="${k}">Start 45 min</button></div>`;
@@ -653,9 +661,9 @@ function pushCard() {
 const isDaddy = p => ['daddy', 'tyler'].includes(String(p.name).trim().toLowerCase());
 function aminoCard(p, dr) {
   if (!isDaddy(p)) return '';
-  const on = !!dr.amino;
-  return `<div class="card"><div class="row sp"><div><div class="lbl">Amino + creatine</div><div style="margin-top:6px;font-size:15px">${on ? 'Logged for today. 8 oz counted toward your water.' : 'One 8 oz drink a day. Logging it adds 8 oz to your water.'}</div></div><span class="badge ${on ? 'good' : ''}">${on ? tick + ' 1 of 1' : '0 of 1'}</span></div>
-    <div class="row" style="margin-top:14px;gap:8px">${on ? '<button class="btn amber sm ctl" data-amino="1">Undo</button>' : '<button class="btn ctl" data-amino="1">I drank my amino</button>'}</div></div>`;
+  const on = !!dr.amino, ed = editable() && p.id === S.me.id;
+  const r = ring(130, 12, on ? 1 : 0, '#b794f4', `<span class="num" style="font-size:30px;font-weight:800">${on ? tick : '8 oz'}</span><span class="lbl">amino</span>`);
+  return `<div class="card" style="text-align:center">${ed ? `<button class="ctl" data-amino="1" style="background:none;border:0;padding:0;color:inherit" aria-label="Amino drink">${r}</button>` : r}</div>`;
 }
 function vWater() {
   if (S.view === 'split' && partner()) return splitWater();
@@ -669,10 +677,7 @@ function vWater() {
   return header('<em>Water</em>') + testBar(p) + `<div class="card" style="text-align:center">${ring(176, 12, Math.min(oz / WATER, 1), WC, `<span class="num" style="font-size:40px;font-weight:800">${oz}</span><span class="lbl">of 128 oz</span>`)}
    <div class="jugs">${jugBtns}${cupBtn}</div><p class="note">Tap each jug when you finish it.${tea ? ' Your last 8 oz is the tea at night.' : ''}</p></div>
    ${aminoCard(p, dr)}
-   ${pushCard()}
-   <div class="card"><div class="lbl">What a reminder looks like</div>
-   <div class="banner show" style="position:static;transform:none;transition:none;width:100%"><div class="ic">${NICON}</div><div style="flex:1"><div class="t">Water Reminder<span>10 am, 12, 2, 4, 6</span></div><div class="m">${ntText()}</div></div></div>
-   <div class="row" style="margin-top:14px"><button class="btn sm" id="notifGo">Show it as a pop-up</button></div></div>`;
+   ${pushCard()}`;
 }
 
 function vReading() {
@@ -694,38 +699,43 @@ function chart(p) {
   const pts = ws.map(x => [pd + (x.day_num - 1) / 74 * (W - 2 * pd), H - pd - ((+x.weight - mn) / (mx - mn)) * (H - 2 * pd)]);
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="margin-top:10px"><polyline points="${pts.map(q => q.join(',')).join(' ')}" fill="none" stroke="#2fd98f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>${pts.map((q, i) => `<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="#2fd98f"/><text x="${q[0]}" y="${q[1] - 9}" fill="#eaf4ee" font-size="10" text-anchor="middle">${ws[i].weight}</text>`).join('')}</svg>`;
 }
+const PROG_IDS = ['numbers', 'photo', 'days'];
+function progOrder() {
+  try { let o = JSON.parse(localStorage.getItem('progOrder')); if (Array.isArray(o)) { o = o.filter(k => PROG_IDS.includes(k)); for (const k of PROG_IDS) if (!o.includes(k)) o.push(k); return o; } } catch (_) { }
+  return PROG_IDS.slice();
+}
 function vProgress() {
   if (S.view === 'split' && partner()) return splitProgress();
-  const p = viewed(), ws = D.weigh[p.id] || [], start = ws[0]?.weight, last = ws[ws.length - 1]?.weight;
-  const diff = ws.length ? Math.round((last - start) * 10) / 10 : null;
+  const p = viewed(), ws = D.weigh[p.id] || [], mine = p.id === S.me.id && editable();
+  const w1 = ws.find(x => x.day_num === 1), last = ws.length ? ws[ws.length - 1] : null;
+  const start = w1 ? +w1.weight : null, cur = last ? +last.weight : null;
+  const diff = start !== null && cur !== null && last !== w1 ? Math.round((cur - start) * 10) / 10 : null;
   const ht = `${Math.floor(p.height_in / 12)}'${p.height_in % 12}"`;
-  const n = dayNum(p), nc = nextCheck(p);
-  const unlocked = nc === 1 || (nc && n >= nc);
+  const n = dayNum(p);
   const photoOf = d => D.daily[dkey(p.id, d)]?.photo_path;
-  const photos = []; for (let i = 0; i < 75; i++) { const d = addDays(p.start_date, i); const ph = photoOf(d); if (ph) photos.push({ i: i + 1, url: S.urls[ph] }); }
-  const first = photos[0], latest = photos[photos.length - 1];
   const todayPh = photoOf(TD), done = !!todayPh;
   const cells = Array.from({ length: 75 }, (_, i) => { const ph = photoOf(addDays(p.start_date, i)); const u = ph && S.urls[ph]; return `<div class="${ph ? 'has' : ''} thumb" ${u ? `style="background-image:url('${u}')"` : ''}>${i + 1}</div>`; }).join('');
-  const baStyle = u => u ? `background:url('${u}') center/cover` : '';
-  return header('<em>Progress</em>') + `
-  <div class="card"><div class="lbl" style="margin-bottom:12px">${esc(p.name)}'s numbers</div>
+  const due = CHECKS.find(c => n >= c && !ws.some(x => x.day_num === c));
+  const slots = CHECKS.map(c => {
+    const rec = ws.find(x => x.day_num === c), open = n >= c;
+    return `<div class="row" style="gap:8px;margin-top:8px"><div style="width:62px;font-size:14px;font-weight:700">Day ${c}</div>${open || rec ? `<input type="number" class="ctl" id="wt-${c}" placeholder="lb" step="0.1" min="50" max="600" value="${rec ? +rec.weight : ''}" ${mine ? '' : 'disabled'}>${mine ? `<button class="btn sm ctl" data-wslot="${c}" style="white-space:nowrap">${rec ? 'Update' : 'Log'}</button>` : ''}${due === c ? '<span class="badge">Due</span>' : ''}` : `<span class="note" style="margin:0">Unlocks on Day ${c}</span>`}</div>`;
+  }).join('');
+  const tiles = {
+    numbers: `<div class="card dtile" data-tile="numbers">${GRIP}<div class="lbl" style="margin-bottom:12px;padding-right:44px">${esc(p.name)}'s numbers</div>
    <div class="statgrid">
-    <div class="tile"><span class="lbl">Height</span><b>${ht}</b></div>
-    <div class="tile"><span class="lbl">Starting</span><b>${start ?? '--'} <small>lb</small></b></div>
-    <div class="tile"><span class="lbl">Current</span><b>${last ?? '--'} <small>lb</small></b></div>
+    <div class="tile"><span class="lbl">Starting height</span><b>${ht}</b></div>
+    <div class="tile"><span class="lbl">Starting weight</span><b>${start ?? '--'} <small>lb</small></b></div>
+    <div class="tile"><span class="lbl">Current weight</span><b>${cur ?? '--'} <small>lb</small></b></div>
     <div class="tile hi"><span class="lbl">Change</span><b>${diff === null ? '--' : (diff > 0 ? '+' : '') + diff} <small>lb</small></b></div>
-   </div></div>
-  <div class="card"><div class="lbl">Weigh-in &middot; every 10 days</div>
-   <p style="margin:8px 0 12px;font-size:15px">${nc === null ? 'All weigh-ins done.' : nc === 1 ? 'Log your <b>starting weight</b>.' : `Next: <b>Day ${nc}</b>${unlocked ? ' (today)' : ` (unlocks on Day ${nc})`}`}</p>
-   ${nc ? `<div class="row ctl"><input type="number" id="wt" placeholder="Weight in lb" step="0.1" min="50" max="600"><button class="btn sm" id="wlog" style="white-space:nowrap" ${unlocked ? '' : 'disabled'}>Log ${nc === 1 ? 'start' : 'Day ' + nc}</button></div>` : ''}
-   ${chart(p)}</div>
-  <div class="card" style="text-align:center">${ring(110, 10, done ? 1 : 0, COLORS.photo, `<span class="lbl" style="color:var(--text)">${done ? 'Done' : 'Today'}</span>`)}
-   <div class="row ctl" style="justify-content:center;margin-top:16px;flex-wrap:wrap"><label class="btn">${done ? 'Replace today\'s photo' : 'Add today\'s photo'}<input id="ph" type="file" accept="image/*" hidden></label><label class="btn ghost">Add an older photo<input id="phOld" type="file" accept="image/*" hidden></label></div>
-   <p class="note" style="margin-top:12px">Take it with your camera or pick one from your camera roll. You can both see each other's photos.</p></div>
-  <div class="card"><div class="lbl" style="margin-bottom:10px">Before and after</div>
-   ${first && latest && first !== latest ? `<div class="ba"><div class="a" style="${baStyle(first.url)}">Day ${first.i}</div><div class="b" id="bb" style="${baStyle(latest.url)}">Day ${latest.i}</div><div class="bar-h" id="bh"></div></div><input type="range" id="sl" min="0" max="100" value="50">`
-     : '<p class="note">Add photos on two different days and your before and after slider shows up here.</p>'}</div>
-  <div class="card"><div class="lbl" style="margin-bottom:10px">All 75 days</div><div class="grid75">${cells}</div></div>`;
+   </div>
+   <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px"><div class="lbl">Weigh-ins &middot; every 10 days</div>${due ? `<p style="margin:8px 0 0;font-size:15px"><b>Day ${due} weigh-in is due.</b> Step on the scale and log it below.</p>` : ''}${slots}</div>
+   ${chart(p)}</div>`,
+    photo: `<div class="card dtile" data-tile="photo" style="text-align:center">${GRIP}${ring(110, 10, done ? 1 : 0, COLORS.photo, `<span class="lbl" style="color:var(--text)">${done ? 'Done' : 'Today'}</span>`)}
+   ${mine ? `<div class="row ctl" style="justify-content:center;margin-top:16px;flex-wrap:wrap"><label class="btn" for="ph">${done ? 'Replace today\'s photo' : 'Add today\'s photo'}</label><label class="btn ghost">Add an older photo<input id="phOld" type="file" accept="image/*" hidden></label></div>` : ''}
+   <p class="note" style="margin-top:12px">Take it with your camera or pick one from your camera roll. You can both see each other's photos.</p></div>`,
+    days: `<div class="card dtile" data-tile="days"><div style="padding-right:44px" class="lbl">All 75 days</div>${GRIP}<div class="grid75" style="margin-top:10px">${cells}</div></div>`
+  };
+  return header('<em>Progress</em>') + `<div id="ptiles" data-dragbox="progress">${progOrder().map(k => tiles[k]).join('')}</div>`;
 }
 
 function splitVal(p, n) {
@@ -799,7 +809,27 @@ function render() {
   app.innerHTML = VIEWS[S.tab]();
   app.className = (!editable() && S.view !== 'split') ? 'ro' : '';
   nav.innerHTML = TABS.map(([k, l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}"><svg width="22" height="22" viewBox="0 0 24 24">${ICONS[k]}</svg>${l}</button>`).join('');
+  if (checkSetup()) return;
   checkAllRings(); checkCelebrate(); checkRestart(); ensureUrls(); animateArcs();
+}
+function needSetup() { return S.me && dayNum(S.me) >= 1 && !S.me.setup_done; }
+function checkSetup() {
+  if (!needSetup()) return false;
+  if ($('overlay').querySelector('#setupBox')) return true;
+  const ft = Math.floor((S.me.height_in || 71) / 12), inch = (S.me.height_in || 71) % 12;
+  $('overlay').innerHTML = `<div class="over" style="overflow-y:auto;align-items:flex-start"><div class="box2" id="setupBox" style="margin:auto;width:100%;text-align:left">
+    <div class="e" style="text-align:center">Day 1 setup</div>
+    <div class="m" style="font-size:24px;text-align:center;margin:12px 0 6px">Let's get your starting numbers</div>
+    <p class="note" style="text-align:center;margin:0 0 18px">Takes a minute, then you're on to Day 1.</p>
+    <div class="lbl" style="margin-bottom:6px">Height</div>
+    <div class="row" style="gap:8px"><input type="number" id="sft" inputmode="numeric" placeholder="ft" min="3" max="8" value="${ft}"><input type="number" id="sin" inputmode="numeric" placeholder="in" min="0" max="11" value="${inch}"></div>
+    <div class="lbl" style="margin:16px 0 6px">Starting weight (lb)</div>
+    <input type="number" id="swt" inputmode="decimal" placeholder="lb" step="0.1" min="50" max="600">
+    <div class="lbl" style="margin:16px 0 6px">Day 1 picture</div>
+    <label class="btn ghost" for="sph" style="text-align:center;display:block"><span id="sphl">Take or choose a photo</span></label>
+    <input type="file" id="sph" accept="image/*" hidden>
+    <div class="row" style="margin-top:22px"><button class="btn" id="setupGo" style="width:100%">Start Day 1</button></div></div></div>`;
+  return true;
 }
 function checkAllRings() {
   if (S.view === 'split' || !editable() || !ringsDone(S.me.id, TD)) return;
@@ -930,6 +960,21 @@ document.addEventListener('click', async e => {
   if (t.id === 'signout') { await sb.auth.signOut(); return; }
   if (d.nt !== undefined) { S.nIdx = +d.nt; render(); return; }
   if (t.id === 'notifGo') { showBanner(); return; }
+  if (t.id === 'setupGo') {
+    const ft = parseInt($('sft').value, 10), inch = parseInt($('sin').value, 10) || 0, w = parseFloat($('swt').value), hi = ft * 12 + inch;
+    if (!(ft >= 3 && ft <= 8) || !(inch >= 0 && inch <= 11) || !(hi >= 40 && hi <= 100)) { toast('Check your height.'); return; }
+    if (!(w >= 50 && w <= 600)) { toast('Enter your weight in pounds.'); return; }
+    if (!S.setupFile) { toast('Add your Day 1 picture.'); return; }
+    t.disabled = true; t.textContent = 'Saving...';
+    try {
+      await must(sb.from('profiles').update({ height_in: hi, setup_done: true }).eq('id', S.user.id));
+      await must(sb.from('weigh_ins').upsert({ user_id: S.user.id, day_num: 1, weight: w }, { onConflict: 'user_id,day_num' }));
+      await uploadPhoto(S.setupFile, S.me.start_date);
+      S.setupFile = null; await loadAll();
+      $('overlay').innerHTML = ''; S.tab = 'today'; S.sub = null; S.view = 'me'; $('app').scrollTo(0, 0); render();
+    } catch (e) { t.disabled = false; t.textContent = 'Start Day 1'; }
+    return;
+  }
   if (t.id === 'oc') { $('overlay').innerHTML = ''; return; }
   if (t.id === 'rsLater') { S.restartSnooze = true; $('overlay').innerHTML = ''; return; }
   if (t.id === 'rsFix') { fixModal(d.date); return; }
@@ -1056,10 +1101,10 @@ document.addEventListener('click', async e => {
     if (!title || !(total > 0)) { toast('Add a title and the number of pages.'); return; }
     await must(sb.from('books').insert({ user_id: u, title, total_pages: total })); await loadAll(); render(); return;
   }
-  if (t.id === 'wlog') {
-    const w = parseFloat($('wt').value), nc = nextCheck(S.me);
+  if (d.wslot) {
+    const c = +d.wslot, inp = $('wt-' + c), w = parseFloat(inp && inp.value);
     if (!(w >= 50 && w <= 600)) { toast('Enter your weight in pounds.'); return; }
-    await must(sb.from('weigh_ins').upsert({ user_id: u, day_num: nc, weight: w }, { onConflict: 'user_id,day_num' })); await loadAll(); render(); return;
+    await must(sb.from('weigh_ins').upsert({ user_id: u, day_num: c, weight: w }, { onConflict: 'user_id,day_num' })); await loadAll(); render(); toast(`Day ${c} weight saved.`); return;
   }
   if (d.g) { const g = D.groceries.find(x => x.id === d.g); g.done = !g.done; render(); sb.from('groceries').update({ done: g.done }).eq('id', g.id); return; }
   if (d.gdel) { D.groceries = D.groceries.filter(x => x.id !== d.gdel); render(); sb.from('groceries').delete().eq('id', d.gdel); return; }
@@ -1074,7 +1119,8 @@ document.addEventListener('change', async e => {
     render();
   } return; }
   if (t.id === 'lpick') { const n = $('lname'); if (t.value === '__custom') { n.style.display = ''; n.value = ''; n.focus(); } else { n.style.display = 'none'; n.value = t.value; } return; }
-  if (t.id === 'ph' && t.files[0]) uploadPhoto(t.files[0], TD);
+  if (t.id === 'ph' && t.files[0]) { const f = t.files[0]; t.value = ''; uploadPhoto(f, TD); }
+  if (t.id === 'sph' && t.files[0]) { S.setupFile = t.files[0]; const l = $('sphl'); if (l) l.textContent = 'Photo selected: ' + (t.files[0].name || 'ready') ; }
   if (t.id === 'phOld' && t.files[0]) {
     const date = prompt('What date was this photo taken? (YYYY-MM-DD)', addDays(TD, -1));
     if (date && /^\d{4}-\d{2}-\d{2}$/.test(date) && date <= TD) uploadPhoto(t.files[0], date); else if (date) toast('Use the format YYYY-MM-DD, and not a future date.');
