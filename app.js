@@ -110,13 +110,12 @@ function rings(u, d) {
   return { indoor: wInfo(wRow(u, d, 'indoor')).frac, outdoor: wInfo(wRow(u, d, 'outdoor')).frac, water: Math.min(r.water_oz / WATER, 1), reading: Math.min(r.pages / 10, 1), photo: r.photo_path ? 1 : 0 };
 }
 const ringsDone = (u, d) => Object.values(rings(u, d)).every(v => v >= 1);
-const complete = (u, d) => Object.values(rings(u, d)).every(v => v >= 1) && dailyRow(u, d).diet;
+const complete = (u, d) => Object.values(rings(u, d)).every(v => v >= 1);
 const dayNum = (p, d = TD) => diffDays(d, p.start_date) + 1;
 function missing(u, d) {
   const f = rings(u, d), r = dailyRow(u, d), out = [];
   if (f.indoor < 1) out.push('indoor workout'); if (f.outdoor < 1) out.push('outdoor workout');
   if (f.water < 1) out.push('water'); if (f.reading < 1) out.push('reading'); if (f.photo < 1) out.push('progress photo');
-  if (!r.diet) out.push('no cheat meals / no alcohol check');
   return out;
 }
 function firstMissedDay(p) {
@@ -239,7 +238,6 @@ function dayCounter(p) {
   return { left: 75 - n + 1, sub: 'days left', note: '', frac: (n - 1) / 75 + .013 };
 }
 function testBar(p) { return dayNum(p) < 1 ? `<div class="roBar" style="color:var(--acc2)">Practice mode until ${pretty(p.start_date)}. Log whatever you like to try things out. None of it counts toward your 75 days.</div>` : ''; }
-function dietBtn(p) { const r = dailyRow(p.id, TD); return `<button class="check ctl" id="diet"><span class="box ${r.diet ? 'on' : ''}">${r.diet ? tick : ''}</span><span>No cheat meals. No alcohol.</span></button>`; }
 
 const GRIP = '<button class="grip" aria-label="Drag to reorder"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></button>';
 const TILE_IDS = ['days', 'all', 'single', 'cal', 'reading', 'photo'];
@@ -287,9 +285,9 @@ function vToday() {
   const pr = partner(), v = viewed();
   if (S.view === 'split') {
     const c = dayCounter(S.me);
-    const col = p => { const r = dailyRow(p.id, TD), done = complete(p.id, TD);
-      return `<div class="p"><h3>${esc(p.name)}</h3>${allRings(p.id, { size: 160, stroke: 11, step: 14 })}
-      <div class="mini" style="margin-top:10px"><span class="box ${r.diet ? 'on' : ''}" style="width:22px;height:22px;border-radius:7px">${r.diet ? tick : ''}</span><span style="flex:1">Diet</span><b style="color:var(--text);font-size:11px">${r.diet ? 'Done' : 'Not yet'}</b></div>
+    const RS = Math.max(100, Math.min(160, Math.floor((Math.min(window.innerWidth, 520) - 32 - 10) / 2 - 34)));
+    const col = p => { const done = complete(p.id, TD);
+      return `<div class="p"><h3>${esc(p.name)}</h3>${allRings(p.id, { size: RS, stroke: RS < 150 ? 9 : 11, step: RS < 150 ? 11 : 14 })}
       <div style="margin-top:10px"><span class="badge ${done ? 'good' : ''}">${done ? 'Day complete' : 'In progress'}</span></div></div>`; };
     return header('Today') + `<div class="card" style="text-align:center"><div class="big">${ring(200, 12, c.frac, '#00e676', `<span class="days" style="font-size:64px">${c.left}</span><span class="dayslbl">${c.sub}</span>`)}</div></div><div class="split">${col(S.me)}${col(pr)}</div>
       <p class="note" style="margin-top:12px">Live view. When ${esc(pr.name)} checks something off, it shows up here.</p>`;
@@ -617,7 +615,7 @@ function vWorkoutPage(k, p) {
 
 function vMeals() {
   const rows = DAYN.map((d, i) => `<tr><td>${d}</td>${SLOTS.map(s => `<td contenteditable="true" class="ctl" data-meal="${i}|${s}">${esc(D.meals[i + '|' + s] || '')}</td>`).join('')}</tr>`).join('');
-  return header('<em>Meals</em>') + dietBtn(viewed()) + `<div style="height:14px"></div>
+  return header('<em>Meals</em>') + `<div style="height:14px"></div>
    <div class="card"><div class="lbl" style="margin-bottom:8px">Weekly plan (shared, tap to edit)</div><div><table class="table"><tr><th></th><th>Breakfast</th><th>Lunch</th><th>Dinner</th><th>Snack</th></tr>${rows}</table></div></div>
    <div class="card"><div class="lbl" style="margin-bottom:6px">Grocery list (shared)</div>
    ${D.groceries.map(g => `<div class="row" style="border-top:1px solid var(--line)"><button class="groc ${g.done ? 'done' : ''}" style="border:0;flex:1" data-g="${g.id}"><span class="box ${g.done ? 'on' : ''}">${g.done ? tick : ''}</span><span>${esc(g.item)}</span></button><button class="xbtn" data-gdel="${g.id}" aria-label="Remove">&times;</button></div>`).join('')}
@@ -902,7 +900,6 @@ function fixModal(date) {
     <label class="check"><input type="checkbox" id="fxB" ${b ? 'checked' : ''}> Outdoor workout done</label>
     <label class="field" style="margin:0"><span>Water (oz)</span><input type="number" id="fxW" value="${r.water_oz}" min="0" max="400"></label>
     <label class="field" style="margin:0"><span>Pages read</span><input type="number" id="fxP" value="${r.pages}" min="0" max="2000"></label>
-    <label class="check"><input type="checkbox" id="fxD" ${r.diet ? 'checked' : ''}> No cheat meals, no alcohol</label>
     <label class="btn ghost" style="text-align:center">${r.photo_path ? 'Replace that day\'s photo' : 'Add that day\'s photo'}<input type="file" id="fxPh" accept="image/*" hidden></label>
    </div><div style="display:grid;gap:10px"><button class="btn" id="fxSave" data-date="${date}">Save</button><button class="link" id="fxCancel">Cancel</button></div></div></div>`;
 }
@@ -1067,7 +1064,7 @@ document.addEventListener('click', async e => {
     };
     try {
       for (const [k, id] of [['indoor', 'fxA'], ['outdoor', 'fxB']]) { const row = mk(k, ok(id)); if (row) await must(sb.from('workouts').upsert(row, { onConflict: 'user_id,day,kind' })); }
-      await must(sb.from('daily').upsert({ user_id: u, day: date, water_oz: Math.min(400, +$('fxW').value || 0), pages: Math.min(2000, +$('fxP').value || 0), diet: ok('fxD'), updated_at: new Date().toISOString() }, { onConflict: 'user_id,day' }));
+      await must(sb.from('daily').upsert({ user_id: u, day: date, water_oz: Math.min(400, +$('fxW').value || 0), pages: Math.min(2000, +$('fxP').value || 0), updated_at: new Date().toISOString() }, { onConflict: 'user_id,day' }));
       $('overlay').innerHTML = ''; await loadAll(); render();
     } catch (_) { }
     return;
@@ -1136,7 +1133,6 @@ document.addEventListener('click', async e => {
     await loadAll(); render(); return;
   }
   const today = TD;
-  if (t.id === 'diet') return saveDaily(today, { diet: !dailyRow(u, today).diet });
   if (d.start) {
     const k = d.start, other = wInfo(wRow(u, today, k === 'indoor' ? 'outdoor' : 'indoor'));
     const types = k === 'indoor' ? ['Lift'] : ['Walk'];
