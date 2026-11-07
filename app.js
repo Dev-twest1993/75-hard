@@ -103,6 +103,7 @@ function rings(u, d) {
   const r = dailyRow(u, d);
   return { indoor: wInfo(wRow(u, d, 'indoor')).frac, outdoor: wInfo(wRow(u, d, 'outdoor')).frac, water: Math.min(r.water_oz / WATER, 1), reading: Math.min(r.pages / 10, 1), photo: r.photo_path ? 1 : 0 };
 }
+const ringsDone = (u, d) => Object.values(rings(u, d)).every(v => v >= 1);
 const complete = (u, d) => Object.values(rings(u, d)).every(v => v >= 1) && dailyRow(u, d).diet;
 const dayNum = (p, d = TD) => diffDays(d, p.start_date) + 1;
 function missing(u, d) {
@@ -180,16 +181,18 @@ function ring(size, stroke, frac, color, inner = '') {
 }
 // Concentric "all rings" graphic. Rings start from where they last were so the 1s refresh does not replay the animation.
 let ARC_LAST = {}, ARC_TAB = null;
-function allRings(u) {
-  const f = rings(u, TD), keys = Object.keys(NAMES), size = 240, stroke = 16, step = 19, c0 = size / 2;
-  const closed = keys.filter(k => f[k] >= 1).length;
+const lite = (hex, a) => { const n = parseInt(hex.slice(1), 16), m = x => Math.round(x + (255 - x) * a); return `rgb(${m(n >> 16)},${m(n >> 8 & 255)},${m(n & 255)})`; };
+function allRings(u, o = {}) {
+  const f = rings(u, TD), keys = Object.keys(NAMES), size = o.size || 300, stroke = o.stroke || 22, step = o.step || stroke + 3, c0 = size / 2;
+  const defs = keys.map(k => `<linearGradient id="g-${u}-${k}-${size}" gradientUnits="userSpaceOnUse" x1="0" y1="${size}" x2="${size}" y2="0"><stop offset="0" stop-color="${COLORS[k]}"/><stop offset="1" stop-color="${lite(COLORS[k], .28)}"/></linearGradient>`).join('');
   const svg = keys.map((k, i) => {
     const r = (size - stroke) / 2 - i * step, c = 2 * Math.PI * r, last = ARC_LAST[u + k] || 0;
-    return `<circle cx="${c0}" cy="${c0}" r="${r}" fill="none" stroke="${COLORS[k]}" stroke-opacity=".13" stroke-width="${stroke}"/>` +
-      `<circle class="arc glow" data-arc="${u + k}" data-f="${Math.max(f[k], .001)}" data-c="${c}" style="color:${COLORS[k]};transition-delay:${i * 120}ms" cx="${c0}" cy="${c0}" r="${r}" fill="none" stroke="${COLORS[k]}" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - Math.max(last, .001))}"/>`;
+    return `<circle cx="${c0}" cy="${c0}" r="${r}" fill="none" stroke="#04100a" stroke-width="${stroke + 4}"/>` +
+      `<circle cx="${c0}" cy="${c0}" r="${r}" fill="none" stroke="${COLORS[k]}" stroke-opacity=".16" stroke-width="${stroke}"/>` +
+      `<circle class="arc" data-arc="${u + k}" data-f="${Math.max(f[k], .001)}" data-c="${c}" style="transition-delay:${i * 120}ms;filter:drop-shadow(0 0 2.5px rgba(0,0,0,.6))" cx="${c0}" cy="${c0}" r="${r}" fill="none" stroke="url(#g-${u}-${k}-${size})" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - Math.max(last, .001))}"/>`;
   }).join('');
-  const legend = keys.map(k => `<div class="lg"><i style="background:${COLORS[k]}"></i><span>${NAMES[k]}</span><b>${Math.round(f[k] * 100)}%</b></div>`).join('');
-  return `<div class="big"><span class="ringwrap" style="width:${size}px;height:${size}px"><svg width="${size}" height="${size}" style="transform:rotate(-90deg)">${svg}</svg><span class="mid"><span class="num" style="font-size:30px;font-weight:800">${closed}/5</span><span class="lbl" style="margin-top:2px">closed</span></span></span></div><div class="arclegend">${legend}</div>`;
+  const legend = o.legend === false ? '' : `<div class="arclegend">${keys.map(k => `<div class="lg"><i style="background:${COLORS[k]}"></i><span>${NAMES[k]}</span><b>${Math.round(f[k] * 100)}%</b></div>`).join('')}</div>`;
+  return `<div class="big"><span class="ringwrap" style="width:${size}px;height:${size}px"><svg width="${size}" height="${size}" style="transform:rotate(-90deg)"><defs>${defs}</defs>${svg}</svg></span></div>${legend}`;
 }
 function animateArcs() {
   if (ARC_TAB !== S.tab) { ARC_LAST = {}; ARC_TAB = S.tab; }
@@ -207,7 +210,7 @@ const ICONS = {
   reading: '<path d="M4 5h6a2 2 0 012 2v12a2 2 0 00-2-2H4zM20 5h-6a2 2 0 00-2 2v12a2 2 0 012-2h6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
   progress: '<path d="M4 18l5-6 4 3 7-9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 21h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
 };
-const TABS = [['today', 'Today'], ['workouts', 'Workouts'], ['meals', 'Meals'], ['water', 'Water'], ['reading', 'Reading'], ['progress', 'Progress']];
+const TABS = [['today', 'Today'], ['workouts', 'Workouts'], ['meals', 'Meals'], ['water', 'Water'], ['progress', 'Progress']];
 
 // ---------- views ----------
 function header(title) {
@@ -230,7 +233,7 @@ function testBar(p) { return dayNum(p) < 1 ? `<div class="roBar" style="color:va
 function dietBtn(p) { const r = dailyRow(p.id, TD); return `<button class="check ctl" id="diet"><span class="box ${r.diet ? 'on' : ''}">${r.diet ? tick : ''}</span><span>No cheat meals. No alcohol.</span></button>`; }
 
 const GRIP = '<button class="grip" aria-label="Drag to reorder"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></button>';
-const TILE_IDS = ['days', 'all', 'single', 'cal'];
+const TILE_IDS = ['days', 'all', 'single', 'cal', 'reading'];
 function tileOrder() {
   try {
     let o = JSON.parse(localStorage.getItem('tileOrder'));
@@ -271,18 +274,18 @@ function vToday() {
   const pr = partner(), v = viewed();
   if (S.view === 'split') {
     const c = dayCounter(S.me);
-    const col = p => { const f = rings(p.id, TD), r = dailyRow(p.id, TD), done = complete(p.id, TD);
-      return `<div class="p"><h3>${esc(p.name)}</h3>${Object.keys(NAMES).map(n => `<div class="mini">${ring(26, 4, f[n], COLORS[n])}<span style="flex:1">${NAMES[n]}</span><b style="color:var(--text);font-size:11px">${splitVal(p, n)}</b></div>`).join('')}
-      <div class="mini"><span class="box ${r.diet ? 'on' : ''}" style="width:22px;height:22px;border-radius:7px">${r.diet ? tick : ''}</span><span style="flex:1">Diet</span><b style="color:var(--text);font-size:11px">${r.diet ? 'Done' : 'Not yet'}</b></div>
+    const col = p => { const r = dailyRow(p.id, TD), done = complete(p.id, TD);
+      return `<div class="p"><h3>${esc(p.name)}</h3>${allRings(p.id, { size: 160, stroke: 11, step: 14 })}
+      <div class="mini" style="margin-top:10px"><span class="box ${r.diet ? 'on' : ''}" style="width:22px;height:22px;border-radius:7px">${r.diet ? tick : ''}</span><span style="flex:1">Diet</span><b style="color:var(--text);font-size:11px">${r.diet ? 'Done' : 'Not yet'}</b></div>
       <div style="margin-top:10px"><span class="badge ${done ? 'good' : ''}">${done ? 'Day complete' : 'In progress'}</span></div></div>`; };
-    return header('Today') + `<div class="card" style="text-align:center"><div class="days" style="font-size:70px">${c.left}</div><div class="dayslbl">${c.sub}</div></div><div class="split">${col(S.me)}${col(pr)}</div>
+    return header('Today') + `<div class="card" style="text-align:center"><div class="big">${ring(200, 12, c.frac, '#2fd98f', `<span class="days" style="font-size:64px">${c.left}</span><span class="dayslbl">${c.sub}</span>`)}</div></div><div class="split">${col(S.me)}${col(pr)}</div>
       <p class="note" style="margin-top:12px">Live view. When ${esc(pr.name)} checks something off, it shows up here.</p>`;
   }
   const f = rings(v.id, TD), c = dayCounter(v);
-  const go = n => n === 'indoor' || n === 'outdoor' ? 'workouts' : n === 'water' ? 'water' : n === 'reading' ? 'reading' : 'progress';
+  const go = n => n === 'indoor' || n === 'outdoor' ? 'workouts' : n === 'water' ? 'water' : n === 'reading' ? 'today' : 'progress';
   const small = Object.keys(NAMES).map(n => `<button data-go="${go(n)}">${ring(60, 7, f[n], COLORS[n], `<span class="num" style="font-size:12px">${Math.round(f[n] * 100)}%</span>`)}<span class="n">${NAMES[n]}</span></button>`).join('');
   let other = '';
-  if (pr && editable()) { const n = Object.values(rings(pr.id, TD)).filter(x => x >= 1).length; other = `<div class="card"><div class="row sp"><div><div class="lbl">${esc(pr.name)} right now</div><div style="margin-top:6px;font-size:15px">${n} of 5 rings closed</div></div>${ring(46, 6, n / 5, '#2fd98f')}</div></div>`; }
+  if (pr && editable()) { const n = Object.values(rings(pr.id, TD)).filter(x => x >= 1).length; other = `<div class="card"><div class="lbl">${esc(pr.name)} right now</div><div style="margin:6px 0 10px;font-size:15px">${n} of 5 rings closed</div>${allRings(pr.id, { size: 200, stroke: 14, step: 17 })}</div>`; }
   if (!pr) other = `<div class="card"><div class="lbl">Waiting for your partner</div><p class="note" style="margin:8px 0 0">Once they create their account, their rings show up here live.</p></div>`;
   return header('Good <em>' + greet() + '</em>') + testBar(v) +
     `<div id="tiles" data-dragbox="today">${tileOrder().map(k => k === 'days'
@@ -290,8 +293,9 @@ function vToday() {
       : k === 'all'
         ? `<div class="card dtile" data-tile="all">${GRIP}${allRings(v.id)}</div>`
         : k === 'cal' ? calTile(v)
+        : k === 'reading' ? readTile(v)
         : `<div class="card dtile" data-tile="single">${GRIP}<div class="lbl" style="margin-bottom:14px">Today's rings</div><div class="rings">${small}</div></div>`).join('')}</div>
-    ${dietBtn(v)}<div style="height:14px"></div>${other}
+    <div style="height:14px"></div>${other}
     <div style="text-align:center;margin-top:8px"><button class="link" id="signout">Sign out</button></div>`;
 }
 
@@ -299,7 +303,9 @@ function vToday() {
 const CAL_OPTS = ['Chest', 'Triceps', 'Biceps', 'Legs', 'Back', 'Shoulders', 'Abs', 'Cardio', 'Yoga', 'Pilates', 'Treadmill', 'Cycling', 'HIIT', 'Rest day'];
 const planOf = (u, day) => D.plans[u + '|' + day] || [];
 function calTile(v) {
-  if (S.calTD !== TD) { S.calTD = TD; S.calSel = TD; S.calMonth = TD.slice(0, 7); }
+  const fin = ringsDone(v.id, TD);
+  if (S.calTD !== TD || (fin && S.calFin !== TD)) { S.calTD = TD; S.calFin = fin ? TD : null; S.calSel = fin ? addDays(TD, 1) : TD; S.calMonth = S.calSel.slice(0, 7); }
+  if (!fin) S.calFin = null;
   const view = S.calView || 'day';
   const sel = S.calSel, ed = editable() && v.id === S.me.id, saved = planOf(v.id, sel), editing = ed && (S.calEditing === sel || !saved.length);
   if (S.calDraftDay !== sel || !editing) { S.calDraftDay = sel; if (!editing) S.calDraft = saved.slice(); else if (S.calDraftFor !== sel) S.calDraft = saved.slice(); }
@@ -342,6 +348,11 @@ async function saveDayPlan(u, day, items) {
   const { error } = items.length ? await sb.from('workout_plans').upsert({ user_id: u, day, items }) : await sb.from('workout_plans').delete().match({ user_id: u, day });
   if (error) { toast(error.message); await loadAll(); render(); }
 }
+function readTile(v) {
+  const pages = dailyRow(v.id, TD).pages, done = pages >= 10, ed = editable() && v.id === S.me.id;
+  const r = ring(130, 12, Math.min(pages / 10, 1), COLORS.reading, `<span class="num" style="font-size:30px;font-weight:800">${pages}</span><span class="lbl">of 10 pages</span>`);
+  return `<div class="card dtile" data-tile="reading">${GRIP}<div class="lbl" style="margin-bottom:12px">Reading</div><div class="big">${ed ? `<button class="ctl" data-rclose="1" style="background:none;border:0;padding:0;color:inherit" aria-label="${done ? 'Reading done. Tap to undo' : 'Tap to close the reading ring'}">${r}</button>` : r}</div><p class="note" style="text-align:center;margin:10px 0 0">${done ? 'Reading is done. Tap the ring to undo.' : 'Finished your 10 pages? Tap the ring to close it.'}</p></div>`;
+}
 function greet() { const h = new Date().getHours(); return h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'; }
 
 function lateRow(k, p) {
@@ -356,7 +367,7 @@ function wCard(k, p) {
   const row = wRow(p.id, TD, k);
   let body = '';
   if (k === 'indoor' && w.st === 'idle') return '';
-  if (w.st === 'done') body = `<div class="timer">Done</div><div class="note">${esc(row.type)} &middot; 45 min complete</div>${p.id === S.me.id ? `<div class="row" style="margin-top:12px"><button class="btn amber sm" data-wundo="${k}">Undo</button></div>` : ''}`;
+  if (w.st === 'done') body = `<div class="timer">Done</div><div class="note">${esc(row.type)} &middot; 45 min complete</div>`;
   else if (w.st === 'running' || w.st === 'paused') {
     const ps = w.st === 'paused', mine = p.id === S.me.id;
     body = `<div class="timer" id="t-${k}">${mmss(w.left)}</div><div class="note">${esc(row.type)} ${ps ? 'is paused. The clock is stopped.' : 'in progress. It closes on its own at 45 minutes.'}</div>` +
@@ -376,7 +387,7 @@ function vWorkouts() {
   const tile = k => {
     const row = wRow(p.id, TD, k), w = wInfo(row);
     const st = w.st === 'done' ? `Done &middot; ${esc(row.type)}` : w.st === 'running' ? `${mmss(w.left)} left &middot; ${esc(row.type)}` : w.st === 'paused' ? `Paused &middot; ${mmss(w.left)} left` : 'Not started';
-    return `<div class="card wtile" data-open="${k}" role="button" tabindex="0"><div class="row sp"><div><div class="lbl">${wLabel(k)}</div><div id="ws-${k}" style="margin-top:6px;font-size:15px">${st}</div>${p.id === S.me.id && (w.st !== 'idle' || (k === 'indoor' && todaySetsAny(p.id))) ? `<div class="row" style="margin-top:10px;gap:8px">${w.st === 'done' ? `<button class="btn amber sm" data-wundo="${k}">Undo</button>` : ''}<button class="btn red sm" data-wreset="${k}">Reset</button></div>` : ''}</div><div class="row" style="gap:12px">${ring(54, 7, w.frac, COLORS[k])}<svg width="10" height="16" viewBox="0 0 10 16"><path d="M2 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/></svg></div></div></div>`;
+    return `<div class="card wtile" data-open="${k}" role="button" tabindex="0"><div class="row sp"><div><div class="lbl">${wLabel(k)}</div><div id="ws-${k}" style="margin-top:6px;font-size:15px">${st}</div>${p.id === S.me.id && (w.st !== 'idle' || (k === 'indoor' && todaySetsAny(p.id))) ? `<div class="row" style="margin-top:10px;gap:8px"><button class="btn red sm" data-wreset="${k}">Reset</button></div>` : ''}</div><div class="row" style="gap:12px">${ring(54, 7, w.frac, COLORS[k])}<svg width="10" height="16" viewBox="0 0 10 16"><path d="M2 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/></svg></div></div></div>`;
   };
   return header('Work<em>outs</em>') + testBar(p) + `<p class="note" style="margin-top:-4px">Tap a workout to open it.</p>` + tile('indoor') + tile('outdoor');
 }
@@ -559,7 +570,7 @@ function startCountdown() {
 }
 function vWorkoutPage(k, p) {
   return header(k === 'indoor' ? '<em>Indoor</em>' : '<em>Outdoor</em>') + testBar(p) +
-    (S.hist && k === 'indoor' ? '' : `<div class="row" style="margin-bottom:14px"><button class="btn ghost sm" data-back="1">&lsaquo; Back to workouts</button></div>`) + (k === 'indoor' ? (p.id === S.me.id && lstep() === 'go' ? (S.hist ? liftHistory(p) : wCard(k, p) + liftSession(p)) : wCard(k, p) + liftPick(p)) : `<div class="card"><div class="lbl">${wLabel(k)} page</div><p style="margin:10px 0 0;font-size:15px">This is the ${k} workout page. Test text for now. More features are coming here.</p></div>` + wCard(k, p));
+    (S.hist && k === 'indoor' ? '' : `<div class="row" style="margin-bottom:14px"><button class="btn ghost sm" data-back="1">&lsaquo; Back to workouts</button></div>`) + (k === 'indoor' ? (p.id === S.me.id && lstep() === 'go' ? (S.hist ? liftHistory(p) : wCard(k, p) + liftSession(p)) : wCard(k, p) + liftPick(p)) : wCard(k, p));
 }
 
 function vMeals() {
@@ -788,7 +799,13 @@ function render() {
   app.innerHTML = VIEWS[S.tab]();
   app.className = (!editable() && S.view !== 'split') ? 'ro' : '';
   nav.innerHTML = TABS.map(([k, l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}"><svg width="22" height="22" viewBox="0 0 24 24">${ICONS[k]}</svg>${l}</button>`).join('');
-  checkCelebrate(); checkRestart(); ensureUrls(); animateArcs();
+  checkAllRings(); checkCelebrate(); checkRestart(); ensureUrls(); animateArcs();
+}
+function checkAllRings() {
+  if (S.view === 'split' || !editable() || !ringsDone(S.me.id, TD)) return;
+  const key = `rings-${S.user.id}-${TD}`;
+  try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (_) { return; }
+  if (S.tab !== 'today' || S.sub) { S.tab = 'today'; S.sub = null; S.hist = null; $('app').scrollTo(0, 0); setTimeout(render, 0); }
 }
 function checkCelebrate() {
   const n = dayNum(S.me), key = `cel-${S.user.id}-${TD}`;
@@ -1020,6 +1037,13 @@ document.addEventListener('click', async e => {
   if (d.amino) { const r = dailyRow(u, today), on = !!r.amino; return saveDaily(today, { amino: !on, water_oz: on ? Math.max(0, r.water_oz - 8) : r.water_oz + 8 }); }
   if (d.jug !== undefined) { const js = jugsFor(S.me), am = dailyRow(u, today).amino ? 8 : 0, idx = +d.jug, oz = dailyRow(u, today).water_oz - am, upto = js.slice(0, idx + 1).reduce((a, b) => a + b, 0), below = js.slice(0, idx).reduce((a, b) => a + b, 0); return saveDaily(today, { water_oz: (oz >= upto ? below : upto) + am }); }
   if (d.cup) return saveDaily(today, { water_oz: dailyRow(u, today).water_oz >= 128 ? 120 : 128 });
+  if (d.rclose) {
+    const cur = dailyRow(u, today).pages, next = cur >= 10 ? 0 : 10, delta = next - cur;
+    await saveDaily(today, { pages: next });
+    const b = (D.books[u] || []).find(x => x.read_pages < x.total_pages) || (delta < 0 ? (D.books[u] || []).find(x => x.read_pages > 0) : null);
+    if (b) { const rp = Math.max(0, Math.min(b.total_pages, b.read_pages + delta)); b.read_pages = rp; render(); sb.from('books').update({ read_pages: rp }).eq('id', b.id); }
+    return;
+  }
   if (d.pg) {
     const delta = +d.pg, cur = dailyRow(u, today).pages, next = Math.max(0, cur + delta);
     await saveDaily(today, { pages: next });
