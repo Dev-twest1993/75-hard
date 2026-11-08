@@ -66,19 +66,19 @@ async function allSets() {
   return { data: out, error: null };
 }
 async function loadAll() {
-  const [p, d, w, b, wi, g, m, lf, wp] = await Promise.all([
+  const [p, d, w, b, wi, g, m, lf, wp, fp] = await Promise.all([
     sb.from('profiles').select('*'), sb.from('daily').select('*'), sb.from('workouts').select('*'),
     sb.from('books').select('*').order('created_at'), sb.from('weigh_ins').select('*').order('day_num'),
-    sb.from('groceries').select('*').order('created_at'), sb.from('meal_plan').select('*'), allSets(), sb.from('workout_plans').select('*')
+    sb.from('groceries').select('*').order('created_at'), sb.from('meal_plan').select('*'), allSets(), sb.from('workout_plans').select('*'), sb.from('fun_photos').select('*').order('created_at', { ascending: false })
   ]);
-  for (const r of [p, d, w, b, wi, g, m, lf, wp]) if (r.error) { toast(r.error.message); return; }
+  for (const r of [p, d, w, b, wi, g, m, lf, wp, fp]) if (r.error) { toast(r.error.message); return; }
   D.profiles = p.data;
   D.daily = {}; d.data.forEach(r => D.daily[dkey(r.user_id, r.day)] = r);
   D.workouts = {}; w.data.forEach(r => D.workouts[r.user_id + '|' + r.day + '|' + r.kind] = r);
   D.books = {}; b.data.forEach(r => (D.books[r.user_id] ||= []).push(r));
   D.weigh = {}; wi.data.forEach(r => (D.weigh[r.user_id] ||= []).push(r));
   D.plans = {}; D.detail = {}; wp.data.forEach(r => { D.plans[r.user_id + '|' + r.day] = r.items; D.detail[r.user_id + '|' + r.day] = r.detail; });
-  D.groceries = g.data;
+  D.fun = fp.data; D.groceries = g.data;
   D.sets = {}; lf.data.forEach(r => (D.sets[r.user_id] ||= []).push(r));
   D.meals = {}; m.data.forEach(r => D.meals[r.day_idx + '|' + r.slot] = r.text);
   S.me = D.profiles.find(x => x.id === S.user.id) || null;
@@ -174,6 +174,7 @@ async function ensureUrls() {
   const need = new Set();
   Object.values(D.daily).forEach(r => { if (r.photo_path && !S.urls[r.photo_path]) need.add(r.photo_path); });
   [S.me, partner()].filter(Boolean).forEach(p => { for (let i = 0; i < 75; i++) { const r = D.daily[dkey(p.id, addDays(p.start_date, i))]; if (r?.photo_path && !S.urls[r.photo_path]) need.add(r.photo_path); } });
+  (D.fun || []).forEach(f => { if (!S.urls[f.path]) need.add(f.path); });
   if (!need.size) return;
   const { data } = await sb.storage.from('progress-photos').createSignedUrls([...need], 3600);
   (data || []).forEach(x => { if (x.signedUrl) S.urls[x.path] = x.signedUrl; });
@@ -448,13 +449,28 @@ const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } ca
 const lKey = n => `${n}-${S.me ? actor().id : S.user?.id}-${TD}`;
 // Lift planning is fresh every time. It is only restored while an indoor workout is actually running.
 const lAct = () => { const w = wInfo(wRow(actor().id, TD, 'indoor')); return w.st === 'running' || w.st === 'paused' || w.st === 'done'; };
+const sj = o => JSON.stringify(o, (k, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a < b ? -1 : 1)) : v);
+const lState = () => ({ sel: S.lsel, plan: S.plan, step: S.lstep, order: S.lorder, done: S.ldone });
+function lApply(sv) {
+  S.lsel = (sv && sv.sel || []).filter(m => MNAME[m]); S.plan = (sv && sv.plan) || {}; S.lstep = (sv && sv.step) || 'pick'; S.lorder = (sv && sv.order) || []; S.ldone = (sv && sv.done) || {};
+}
+// The lifting plan for a running workout lives on the workout row in the database, so every device sees the same one.
 function lInit() {
-  if (S.linit) return; S.linit = true;
-  const sv = lAct() ? lsGet(lKey('lsess')) : null;
-  S.lsel = (sv && sv.sel || []).filter(m => MNAME[m]); S.plan = (sv && sv.plan) || {}; S.lstep = (sv && sv.step) || 'pick'; S.lorder = (sv && sv.order) || []; S.ldone = (sv && sv.done) || {}; S.shut = {}; S.hist = null; S.pick = {}; S.custom = {}; S.pOther = {};
+  const u = S.me ? actor().id : S.user?.id, row = wRow(u, TD, 'indoor'), rs = row && row.session, stamp = u + '|' + (rs ? sj(rs) : '');
+  if (S.linit && S.lstamp === stamp) return;
+  if (S.linit && (!rs || Date.now() - (S.llast || 0) < 4000)) return;   // nothing shared yet, or we just changed it ourselves
+  const first = !S.linit; S.linit = true; S.lstamp = stamp;
+  lApply(rs || (lAct() ? lsGet(lKey('lsess')) : null));
+  if (first) { S.opn = {}; S.hist = null; S.pick = {}; S.custom = {}; S.pOther = {}; }
 }
 let CTX = false;   // true while the calendar's workout builder (for another day) is being drawn or clicked
-const lSave = () => CTX ? 0 : lsSet(lKey('lsess'), { sel: S.lsel, plan: S.plan, step: S.lstep, order: S.lorder, done: S.ldone });
+const lSave = () => {
+  if (CTX) return 0;
+  const st = lState(), u = actor().id, row = wRow(u, TD, 'indoor'); lsSet(lKey('lsess'), st);
+  if (!row) return;
+  row.session = st; S.lstamp = u + '|' + sj(st); S.llast = Date.now();
+  clearTimeout(lSave.t); lSave.t = setTimeout(async () => { const { error } = await sb.from('workouts').update({ session: lState() }).match({ user_id: u, day: TD, kind: 'indoor' }); if (error) toast(error.message); }, 350);
+};
 function lKeys() {   // every planned lift as 'muscle|name', in the user's own drag order
   const flat = []; for (const m of lsel()) for (const n of (lplan()[m] || [])) flat.push(m + '|' + n);
   const ord = S.lorder || []; return [...ord.filter(k => flat.includes(k)), ...flat.filter(k => !ord.includes(k))];
@@ -532,7 +548,7 @@ function lastSummary(rows) {   // just the headline number from the previous ses
 }
 function liftTile(p, key) {
   const i = key.indexOf('|'), m = key.slice(0, i), n = key.slice(i + 1);
-  const done = todaySets(p.id, n), lt = lastTime(p.id, n), seed = done[done.length - 1] || (lt && lt.rows[0]) || {}, open = !(S.shut || {})[key], fin = (S.ldone || {})[key];
+  const done = todaySets(p.id, n), lt = lastTime(p.id, n), seed = done[done.length - 1] || (lt && lt.rows[0]) || {}, open = !!(S.opn || {})[key], fin = (S.ldone || {})[key];
   // Defaults: today's last set once you have logged one, otherwise the top set from last time. Sets box = sets still to go.
   const top = lt ? lt.rows.slice().sort((a, b) => (+b.weight || 0) - (+a.weight || 0) || a.set_no - b.set_no)[0] : null, src = done[done.length - 1] || top || {};
   const wv = src.weight != null && +src.weight > 0 ? +src.weight : '', rv = src.reps ?? '', tsec = src.seconds || 0;
@@ -543,6 +559,7 @@ function liftTile(p, key) {
   return `<div class="card dtile lift" data-lb="${esc(key)}" style="padding-bottom:${open ? 14 : 18}px">${GRIP}
     <button class="ctl" data-ltoggle="${esc(key)}" style="display:block;width:100%;background:none;border:0;color:var(--text);font:inherit;padding:0 44px 0 0;text-align:left"><div class="lbl" style="color:var(--acc)">${MNAME[m]}</div>
       <div class="row" style="margin-top:6px;gap:10px"><b style="flex:1;font-size:17px">${esc(n)}</b><span class="badge ${fin ? 'good' : ''}">${fin ? tick + ' ' : ''}${sum}</span><svg width="14" height="14" viewBox="0 0 14 14" style="transform:rotate(${open ? 180 : 0}deg);opacity:.5;flex:none"><path d="M2 5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div></button>
+    ${!done.length && !fin && canEdit(p.id) ? `<div class="row" style="margin-top:10px"><button class="btn sm red ctl" data-lremove="${esc(key)}">Remove</button></div>` : ''}
     ${open ? `${lt ? `<p class="note" style="margin:8px 0 0">Last time (${pretty(lt.day)}): ${lastSummary(lt.rows)}</p>` : ''}<div style="margin-top:8px">${rows}</div>
       <div class="lgrid">${fld('lw', 'Weight (lb)', 'lb', wv, 'step="0.5"')}${fld('lr', 'Reps', 'reps', rv)}${fld('ls', 'Sets', '1', sv, 'max="20"')}</div>
       <div class="lgrid two">${fld('lm', 'Time min', 'min', mv)}${fld('lt', 'Time sec', 'sec', tv, 'max="59"')}</div>
@@ -605,7 +622,7 @@ function startCountdown() {
   show();
   const iv = setInterval(() => {
     n--; show();
-    if (n === 0) { clearInterval(iv); saveWorkout({ user_id: S.user.id, day: TD, kind: 'indoor', type: S.wtype.indoor || 'Lift', started_at: new Date().toISOString(), done_at: null, override: false }); setTimeout(() => el.remove(), 900); }
+    if (n === 0) { clearInterval(iv); { const u0 = actor().id; S.lstamp = u0 + '|' + sj(lState()); S.llast = Date.now(); saveWorkout({ user_id: u0, day: TD, kind: 'indoor', type: S.wtype.indoor || 'Lift', started_at: new Date().toISOString(), done_at: null, override: false, session: lState() }); } setTimeout(() => el.remove(), 900); }
   }, 1000);
 }
 function vWorkoutPage(k, p) {
@@ -740,7 +757,12 @@ function chart(p) {
    <polyline points="${pts.map(q => q.join(',')).join(' ')}" fill="none" stroke="#30d158" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
    ${pts.map((q, i) => `<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="#30d158" stroke="#060c09" stroke-width="2"/><text x="${q[0]}" y="${q[1] - 9}" fill="#eaf4ee" font-size="10" text-anchor="middle">${+ws[i].weight}</text>`).join('')}</svg>`;
 }
-const PROG_IDS = ['numbers', 'days'];
+const PROG_IDS = ['numbers', 'days', 'fun'];
+function funTile() {
+  const list = D.fun || [], who = id => (D.profiles.find(p => p.id === id) || {}).name || '';
+  const cells = list.map(f => { const u = S.urls[f.path]; return `<div class="fthumb" ${u ? `data-pv="${esc(f.path)}" data-fid="${f.id}" data-cap="${esc(who(f.user_id))} &middot; ${pretty(f.taken_on)}" style="background-image:url('${u}')"` : ''}></div>`; }).join('');
+  return `<div class="card dtile" data-tile="fun">${GRIP}<div class="lbl" style="padding-right:44px">Fun Photos</div><p class="note" style="margin:6px 0 12px">${list.length ? list.length + ' memor' + (list.length === 1 ? 'y' : 'ies') + ' from the journey.' : 'Add photos of the good moments along the way.'}</p><button class="btn sm ctl" data-funadd="1">Add photos</button>${list.length ? `<div class="fungrid">${cells}</div>` : ''}</div>`;
+}
 function progOrder() {
   try { let o = JSON.parse(localStorage.getItem('progOrder')); if (Array.isArray(o)) { o = o.filter(k => PROG_IDS.includes(k)); for (const k of PROG_IDS) if (!o.includes(k)) o.push(k); return o; } } catch (_) { }
   return PROG_IDS.slice();
@@ -771,7 +793,8 @@ function vProgress() {
    </div>
    <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px"><div class="lbl">Weigh-ins &middot; every 10 days</div>${due ? `<p style="margin:8px 0 0;font-size:15px"><b>Day ${due} weigh-in is due.</b> Step on the scale and log it below.</p>` : ''}${slots}</div>
    ${chart(p)}</div>`,
-    days: `<div class="card dtile" data-tile="days"><div style="padding-right:44px" class="lbl">Progress Photos</div>${GRIP}<div class="grid75" style="margin-top:10px">${cells}</div></div>`
+    days: `<div class="card dtile" data-tile="days"><div style="padding-right:44px" class="lbl">Progress Photos</div>${GRIP}<div class="grid75" style="margin-top:10px">${cells}</div></div>`,
+    fun: funTile()
   };
   return header('<em>Progress</em>') + `<div id="ptiles" data-dragbox="progress">${progOrder().map(k => tiles[k]).join('')}</div>`;
 }
@@ -845,6 +868,7 @@ function render() {
   if (!S.me) { nav.hidden = true; app.innerHTML = '<p class="note" style="padding:40px 0;text-align:center">Loading your profile...</p>'; return; }
   if (S.view === 'partner' && !partner()) S.view = 'me';
   nav.hidden = false;
+  document.body.dataset.tab = S.tab;
   app.innerHTML = VIEWS[S.tab]();
   app.className = (!editable() && S.view !== 'split') ? 'ro' : '';
   nav.innerHTML = TABS.map(([k, l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}"><svg width="22" height="22" viewBox="0 0 24 24">${ICONS[k]}</svg>${l}</button>`).join('');
@@ -952,9 +976,17 @@ document.addEventListener('click', async e => {
   if (t.id === 'pushTest') { try { const reg = await navigator.serviceWorker.ready; await reg.showNotification('Water Reminder', { body: reminderText(S.me, dailyRow(S.me.id, TD).water_oz), icon: 'icon-180.png' }); } catch (e) { toast('Could not show it: ' + e.message); } return; }
   if (t.id === 'atoggle') { S.authMode = S.authMode === 'up' ? 'in' : 'up'; render(); return; }
   if (!S.me) return;
+  if (d.funadd) { $('fph').click(); return; }
+  if (d.fundel) {
+    if (!confirm('Delete this photo for good?')) return;
+    $('overlay').innerHTML = '';
+    D.fun = (D.fun || []).filter(f => f.id !== d.fundel); render();
+    const r1 = await sb.from('fun_photos').delete().eq('id', d.fundel); await sb.storage.from('progress-photos').remove([d.fpath]);
+    if (r1.error) { toast(r1.error.message); await loadAll(); render(); } return;
+  }
   if (d.pv) {
     const url = S.urls[d.pv]; if (!url) { toast('Photo is still loading.'); return; }
-    $('overlay').innerHTML = `<div class="over" id="imgv" style="flex-direction:column;gap:14px;padding:16px"><div style="color:var(--text);font-weight:700">${esc(d.cap || '')}</div><img src="${url}" alt="Progress photo" style="max-width:100%;max-height:78vh;border-radius:16px;object-fit:contain"><button class="btn" id="imgx">Close</button></div>`; return;
+    $('overlay').innerHTML = `<div class="over" id="imgv" style="flex-direction:column;gap:14px;padding:16px"><div style="color:var(--text);font-weight:700">${esc(d.cap || '')}</div><img src="${url}" alt="Progress photo" style="max-width:100%;max-height:78vh;border-radius:16px;object-fit:contain"><div class="row" style="gap:10px"><button class="btn" id="imgx">Close</button>${d.fid && canEdit((D.fun || []).find(f => f.id === d.fid)?.user_id) ? `<button class="btn red" data-fundel="${esc(d.fid)}" data-fpath="${esc(d.pv)}">Delete</button>` : ''}</div></div>`; return;
   }
   if (t.id === 'imgx' || t.id === 'imgv') { $('overlay').innerHTML = ''; return; }
   if (d.phundo) {
@@ -997,7 +1029,7 @@ document.addEventListener('click', async e => {
     const det = detailOf(u, TD); if (!det) return;
     if (wInfo(wRow(u, TD, 'outdoor')).st === 'running' || wInfo(wRow(u, TD, 'outdoor')).st === 'paused') { toast('Finish your outdoor workout first.'); return; }
     const idle = wInfo(wRow(u, TD, 'indoor')).st === 'idle';
-    lInit(); S.wtype.indoor = det.type; S.lsel = det.sel.slice(); S.plan = JSON.parse(JSON.stringify(det.plan)); S.lorder = []; S.ldone = {}; S.shut = {}; S.hist = null; S.lstep = 'go'; lSave();
+    lInit(); S.wtype.indoor = det.type; S.lsel = det.sel.slice(); S.plan = JSON.parse(JSON.stringify(det.plan)); S.lorder = []; S.ldone = {}; S.opn = {}; S.hist = null; S.lstep = 'go'; lSave();
     S.tab = 'workouts'; S.sub = 'indoor'; $('app').scrollTo(0, 0); render();
     if (idle) startCountdown();
     return;
@@ -1015,7 +1047,15 @@ document.addEventListener('click', async e => {
   if (d.ptog) { const i = d.ptog.indexOf('|'), m = d.ptog.slice(0, i), n = d.ptog.slice(i + 1), pl = lplan(); pl[m] = pl[m] || []; const k = pl[m].indexOf(n); if (k >= 0) pl[m].splice(k, 1); else pl[m].push(n); savePlan(); render(); return; }
   if (d.pother) { (S.pOther ||= {})[d.pother] = !S.pOther[d.pother]; render(); return; }
   if (d.paddc) { const m = d.paddc, inp = $('pcustom-' + m), n = inp ? inp.value.trim() : ''; if (!n) { toast('Type a lift name first.'); return; } const pl = lplan(); pl[m] = pl[m] || []; if (!pl[m].some(x => x.toLowerCase() === n.toLowerCase())) pl[m].push(n); S.pOther[m] = false; savePlan(); render(); return; }
-  if (d.ltoggle) { (S.shut ||= {})[d.ltoggle] = !S.shut[d.ltoggle]; render(); return; }
+  if (d.ltoggle) { (S.opn ||= {})[d.ltoggle] = !S.opn[d.ltoggle]; render(); return; }
+  if (d.lremove) {
+    if (!editable()) return;
+    const key = d.lremove, i = key.indexOf('|'), m = key.slice(0, i), n = key.slice(i + 1), pl = lplan();
+    if (todaySets(u, n).length) { toast('That lift has sets logged. Undo them first.'); return; }
+    if (pl[m]) pl[m] = pl[m].filter(x => x !== n);
+    if (S.ldone) delete S.ldone[key]; if (S.opn) delete S.opn[key]; S.lorder = (S.lorder || []).filter(k => k !== key);
+    lSave(); render(); toast('Removed ' + n + ' from today.'); return;
+  }
   if (d.lhist) { const key = t.closest('.lift').dataset.lb; S.hist = { key, name: key.slice(key.indexOf('|') + 1) }; S.hmetric = null; $('app').scrollTo(0, 0); render(); return; }
   if (d.lhback) { S.hist = null; render(); return; }
   if (d.hmetric) { S.hmetric = d.hmetric; render(); return; }
@@ -1108,11 +1148,10 @@ document.addEventListener('click', async e => {
   }
   if (d.lcomp) {
     const key = t.closest('.lift').dataset.lb, keys = lKeys(), i = keys.indexOf(key);
-    (S.ldone ||= {})[key] = true; (S.shut ||= {})[key] = true;
+    (S.ldone ||= {})[key] = true; (S.opn ||= {})[key] = false;
     const next = [...keys.slice(i + 1), ...keys.slice(0, i)].find(k => !S.ldone[k]);
-    if (next) S.shut[next] = false; lSave(); render();
-    if (next) { const el = [...document.querySelectorAll('.lift')].find(x => x.dataset.lb === next); if (el) setTimeout(() => { const a = $('app'); a.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top - a.getBoundingClientRect().top + a.scrollTop - 14), left: 0, behavior: 'smooth' }); }, 60); }
-    else toast('Every lift is done. Nice work!');
+    lSave(); render();
+    if (next) toast('Done. Pick your next lift.'); else toast('Every lift is done. Nice work!');
     return;
   }
   if (d.logset) {
@@ -1126,7 +1165,7 @@ document.addEventListener('click', async e => {
     const rows = Array.from({ length: sets }, (_, k) => ({ user_id: u, day: TD, muscle: m, exercise: name, set_no: base + k + 1, reps, weight, seconds: secs > 0 ? secs : null }));
     D.sets[u] = [...(D.sets[u] || []), ...rows.map((r, k) => ({ ...r, id: 'tmp' + Date.now() + k, user_id: u }))];
     if (S.ldone) { delete S.ldone[key]; lSave(); }
-    (S.shut ||= {})[key] = false; render();
+    (S.opn ||= {})[key] = true; render();
     toast(`Logged ${sets > 1 ? sets + ' sets' : 'set ' + (base + 1)}: ${fmtSet(rows[0]).replace(/&middot;/g, '-')}`);
     const { error } = await sb.from('lift_sets').insert(rows);
     if (error) { toast(error.message); }
@@ -1190,6 +1229,20 @@ document.addEventListener('change', async e => {
     render();
   } return; }
   if (t.id === 'lpick') { const n = $('lname'); if (t.value === '__custom') { n.style.display = ''; n.value = ''; n.focus(); } else { n.style.display = 'none'; n.value = t.value; } return; }
+  if (t.id === 'fph' && t.files.length) {
+    const files = [...t.files]; t.value = ''; const u = actor().id; let n = 0;
+    toast('Saving ' + (files.length === 1 ? 'photo' : files.length + ' photos') + '...');
+    for (const f of files) {
+      try {
+        const blob = await compress(f), path = `${u}/fun/${crypto.randomUUID()}.jpg`;
+        const up = await sb.storage.from('progress-photos').upload(path, blob, { contentType: 'image/jpeg' }); if (up.error) throw up.error;
+        S.urls[path] = URL.createObjectURL(blob);
+        const ins = await sb.from('fun_photos').insert({ user_id: u, path }); if (ins.error) throw ins.error; n++;
+      } catch (e) { toast('Photo failed: ' + (e.message || e)); }
+    }
+    await loadAll(); render(); if (n) toast(n === 1 ? 'Photo added.' : n + ' photos added.');
+    return;
+  }
   if (t.id === 'ph' && t.files[0]) { const f = t.files[0]; t.value = ''; uploadPhoto(f, TD); }
   if (t.id === 'sph' && t.files[0]) { S.setupFile = t.files[0]; const l = $('sphl'); if (l) l.textContent = 'Photo selected: ' + (t.files[0].name || 'ready') ; }
   if (t.id === 'phOld' && t.files[0]) {
