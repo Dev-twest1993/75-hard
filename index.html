@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-07b">
+<meta name="app-version" content="2026-11-07c">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -90,6 +90,14 @@ svg[role=img]{display:block;width:100%;max-width:100%;height:auto}
 .fld{display:flex;flex-direction:column;gap:4px;min-width:0}.fld span{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);font-weight:600}
 .fld input{width:100%;min-width:0;box-sizing:border-box}
 .wtile{display:block;width:100%;text-align:left;color:var(--text);font:inherit;cursor:pointer;box-sizing:border-box}
+#mx{position:fixed;inset:0;z-index:97;background:rgba(0,0,0,.94);overflow:auto;padding:16px 16px 40px;-webkit-overflow-scrolling:touch}
+#mx .in{max-width:520px;margin:0 auto}
+.mtot{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.mt{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:14px;padding:10px 4px;text-align:center}
+.mt b{display:block;font-size:18px}.mt span{font-size:11px;color:var(--dim)}
+.mrow{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--line)}
+.mth{width:64px;height:64px;flex:none;border-radius:14px;background:rgba(255,255,255,.05) center/cover;border:1px solid var(--line)}
+.mi{flex:1;min-width:0;font-size:15px}
 .fungrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
 .fthumb{aspect-ratio:1;border-radius:14px;background:rgba(255,255,255,.04) center/cover;border:1px solid var(--line);cursor:pointer}
 /* Workout page buttons: gunmetal with a colored underline */
@@ -220,9 +228,10 @@ textarea{background:rgba(0,0,0,.35);border:1px solid var(--line);color:var(--tex
 <div id="overlay"></div>
 <input id="ph" type="file" accept="image/*" hidden>
 <input id="fph" type="file" accept="image/*" multiple hidden>
+<input id="mph" type="file" accept="image/*" hidden>
 <div class="banner" id="banner"></div>
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="app.js?v=2026-11-07b"></script>
+<script src="app.js?v=2026-11-07c"></script>
 </body>
 </html>

@@ -66,19 +66,19 @@ async function allSets() {
   return { data: out, error: null };
 }
 async function loadAll() {
-  const [p, d, w, b, wi, g, m, lf, wp, fp] = await Promise.all([
+  const [p, d, w, b, wi, g, m, lf, wp, fp, ml, sm] = await Promise.all([
     sb.from('profiles').select('*'), sb.from('daily').select('*'), sb.from('workouts').select('*'),
     sb.from('books').select('*').order('created_at'), sb.from('weigh_ins').select('*').order('day_num'),
-    sb.from('groceries').select('*').order('created_at'), sb.from('meal_plan').select('*'), allSets(), sb.from('workout_plans').select('*'), sb.from('fun_photos').select('*').order('created_at', { ascending: false })
+    sb.from('groceries').select('*').order('created_at'), sb.from('meal_plan').select('*'), allSets(), sb.from('workout_plans').select('*'), sb.from('fun_photos').select('*').order('created_at', { ascending: false }), sb.from('meal_log').select('*').order('created_at'), sb.from('saved_meals').select('*').order('created_at', { ascending: false })
   ]);
-  for (const r of [p, d, w, b, wi, g, m, lf, wp, fp]) if (r.error) { toast(r.error.message); return; }
+  for (const r of [p, d, w, b, wi, g, m, lf, wp, fp, ml, sm]) if (r.error) { toast(r.error.message); return; }
   D.profiles = p.data;
   D.daily = {}; d.data.forEach(r => D.daily[dkey(r.user_id, r.day)] = r);
   D.workouts = {}; w.data.forEach(r => D.workouts[r.user_id + '|' + r.day + '|' + r.kind] = r);
   D.books = {}; b.data.forEach(r => (D.books[r.user_id] ||= []).push(r));
   D.weigh = {}; wi.data.forEach(r => (D.weigh[r.user_id] ||= []).push(r));
   D.plans = {}; D.detail = {}; wp.data.forEach(r => { D.plans[r.user_id + '|' + r.day] = r.items; D.detail[r.user_id + '|' + r.day] = r.detail; });
-  D.fun = fp.data; D.groceries = g.data;
+  D.mlog = ml.data; D.saved = sm.data; D.fun = fp.data; D.groceries = g.data;
   D.sets = {}; lf.data.forEach(r => (D.sets[r.user_id] ||= []).push(r));
   D.meals = {}; m.data.forEach(r => D.meals[r.day_idx + '|' + r.slot] = r.text);
   S.me = D.profiles.find(x => x.id === S.user.id) || null;
@@ -175,10 +175,11 @@ async function ensureUrls() {
   Object.values(D.daily).forEach(r => { if (r.photo_path && !S.urls[r.photo_path]) need.add(r.photo_path); });
   [S.me, partner()].filter(Boolean).forEach(p => { for (let i = 0; i < 75; i++) { const r = D.daily[dkey(p.id, addDays(p.start_date, i))]; if (r?.photo_path && !S.urls[r.photo_path]) need.add(r.photo_path); } });
   (D.fun || []).forEach(f => { if (!S.urls[f.path]) need.add(f.path); });
+  [...(D.mlog || []), ...(D.saved || [])].forEach(r => { if (r.photo_path && !S.urls[r.photo_path]) need.add(r.photo_path); });
   if (!need.size) return;
   const { data } = await sb.storage.from('progress-photos').createSignedUrls([...need], 3600);
   (data || []).forEach(x => { if (x.signedUrl) S.urls[x.path] = x.signedUrl; });
-  if (S.tab === 'progress') softRender();
+  if (S.tab === 'progress' || S.tab === 'meals') softRender();
 }
 
 // ---------- ring + small ui helpers ----------
@@ -317,7 +318,7 @@ const CAL_OPTS = ['Chest', 'Triceps', 'Biceps', 'Legs', 'Back', 'Shoulders', 'Ab
 const planOf = (u, day) => D.plans[u + '|' + day] || [];
 const detailOf = (u, day) => { const d = D.detail[u + '|' + day]; return d && d.sel && d.sel.length ? d : null; };
 function detSummary(d) {
-  const lines = d.sel.map(m => `<b>${MNAME[m] || m}</b>: ${esc((d.plan[m] || []).join(', ') || 'no workouts picked')}`);
+  const lines = d.sel.map(m => `<b>${MNAME[m] || m}</b>: ${esc((d.plan[m] || []).join(', ') || 'full plan not built yet')}`);
   return (d.type === 'Lift' ? 'Lifting' : esc(d.type)) + '<br>' + lines.join('<br>');
 }
 function calTile(v) {
@@ -361,7 +362,8 @@ function calTile(v) {
     : saved.length
       ? `<div style="margin:10px 0 0;font-size:20px;font-weight:700;line-height:1.3">${esc(saved.join(' + '))}</div>${ed ? '<div class="row" style="margin-top:12px"><button class="btn ghost sm ctl" data-caledit="1">Change plan</button></div>' : ''}`
       : '<p class="note" style="margin:8px 0 0">Nothing planned.</p>';
-  const planner = `<div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">${head}${body}</div>`;
+  const hideP = ed && sel >= TD, jump = sel !== TD ? '<button class="link" data-caltoday="1">Jump to today</button>' : '';
+  const planner = hideP ? '' : `<div style="border-top:1px solid var(--line);margin-top:14px;padding-top:12px">${head}${body}</div>`;
   let go = '';
   const det = detailOf(v.id, sel);
   if (ed && sel === TD) {
@@ -369,8 +371,8 @@ function calTile(v) {
     go = `<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">${w.st === 'idle' ? liftPick(v, true) : `<div class="lbl">Today's workout</div><p class="note" style="margin:6px 0 10px">Your indoor workout is ${w.st === 'done' ? 'done' : 'in progress'}.</p><button class="btn ctl" data-calopen="1">Open workout</button>`}</div>`;
   } else if (ed && sel > TD) {
     if (S.cdDay !== sel) { S.cdDay = sel; S.cdEditing = null; S.cd = det ? { type: det.type, sel: det.sel.slice(), plan: JSON.parse(JSON.stringify(det.plan)), step: 'plan' } : { type: 'Lift', sel: [], plan: {}, step: 'pick' }; }
-    if (det && S.cdEditing !== sel) go = `<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px"><div class="lbl">Planned workout</div><div style="margin:8px 0 12px;font-size:14px;line-height:1.5">${detSummary(det)}</div><div class="row" style="gap:8px"><button class="btn ghost sm ctl" data-cedit="1">Edit workout</button><button class="btn ghost sm ctl" data-cdel="1">Remove</button></div></div>`;
-    else { CTX = true; const h = liftPick(v, true); CTX = false; go = `<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px"><div class="lbl" style="margin-bottom:8px">Plan this day's workout</div>${h}</div>`; }
+    if (det && S.cdEditing !== sel) go = `<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px"><div class="row sp"><div class="lbl">Planned workout</div>${jump}</div><div style="margin:8px 0 12px;font-size:14px;line-height:1.5">${detSummary(det)}</div><div class="row" style="gap:8px"><button class="btn ghost sm ctl" data-cedit="1">Edit workout</button><button class="btn ghost sm ctl" data-cdel="1">Remove</button></div></div>`;
+    else { CTX = true; const h = liftPick(v, true); CTX = false; go = `<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px"><div class="row sp" style="margin-bottom:8px"><div class="lbl">Plan this day's workout</div>${jump}</div>${saved.length && !det ? `<p class="note" style="margin:0 0 10px">Earlier plan: ${esc(saved.join(' + '))}</p>` : ''}${h}</div>`; }
   } else if (det) {
     go = `<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px"><div class="lbl">Planned workout</div><div style="margin-top:8px;font-size:14px;line-height:1.5">${detSummary(det)}</div></div>`;
   }
@@ -505,12 +507,12 @@ function syncType(ty) {
   const key = ty.toLowerCase();
   if (CTX) {
     const c = S.cd; if (ty === 'Lift') c.sel = c.sel.filter(m => LMUS.includes(m));
-    else if (c.sel.length !== 1 || c.sel[0] !== key) { c.sel = [key]; c.step = 'plan'; }
+    else if (c.sel.length !== 1 || c.sel[0] !== key) { c.sel = [key]; c.step = 'pick'; }
     return;
   }
   lInit();
   if (ty === 'Lift') S.lsel = S.lsel.filter(m => LMUS.includes(m));
-  else if (S.lsel.length !== 1 || S.lsel[0] !== key) { S.lsel = [key]; if (S.lstep === 'pick') S.lstep = 'plan'; }
+  else if (S.lsel.length !== 1 || S.lsel[0] !== key) { S.lsel = [key]; if (S.lstep !== 'go') S.lstep = 'pick'; }
 }
 function liftPick(p, bare) {
   const W = h => bare ? h : `<div class="card">${h}</div>`;
@@ -530,9 +532,10 @@ function liftPick(p, bare) {
   const pdet = !CTX && !busy ? detailOf(p.id, TD) : null;
   const plannedCard = pdet ? `<div style="border:1px solid var(--line);border-radius:16px;padding:12px;margin-bottom:16px"><div class="lbl">Planned for today</div><div style="margin:6px 0 10px;font-size:14px;line-height:1.5">${detSummary(pdet)}</div><button class="btn sm ctl" data-cstart="1">Start planned workout</button></div>` : '';
   const typeQ = `<div class="lbl" style="margin-bottom:8px">What indoor workout are we going to target?</div><select data-wtype="indoor">${IT.map(([v, n]) => `<option value="${v}" ${v === ty ? 'selected' : ''}>${n}</option>`).join('')}</select>`;
-  if (!lift) return W(`${plannedCard}${typeQ}${planSection()}`);
+  const sv = busy ? '' : `<button class="btn ghost ctl" id="${CTX ? 'csaveq' : 'psaveq'}" ${sel.length ? '' : 'disabled style="opacity:.45"'}>Save plan</button>`;
+  if (!lift) return W(`${plannedCard}${typeQ}${(lstep() === 'plan' || busy) ? planSection() : `<div class="row" style="margin-top:14px;gap:8px">${sv}<button class="btn ctl" id="lsubmit">Next</button></div>`}`);
   return W(`${plannedCard}${typeQ}<div class="lbl" style="margin:18px 0 4px">What are we training?</div><p class="note" style="margin:0 0 4px">Pick one or more muscle groups.</p><div class="chips">${chips}</div>
-    <div class="row" style="margin-top:6px"><button class="btn ctl" id="lsubmit" ${sel.length ? '' : 'disabled style="opacity:.45"'}>Next</button></div>
+    <div class="row" style="margin-top:6px;gap:8px">${sv}<button class="btn ctl" id="lsubmit" ${sel.length ? '' : 'disabled style="opacity:.45"'}>Next</button></div>
     ${lstep() === 'plan' ? planSection() : ''}
     ${logged && !CTX ? `<p class="note" style="margin:10px 0 0">${logged} set${logged === 1 ? '' : 's'} logged today.</p>` : ''}`);
 }
@@ -639,15 +642,119 @@ function vWorkoutPage(k, p) {
     (S.hist && k === 'indoor' ? '' : `<div class="row" style="margin-bottom:14px"><button class="btn ghost sm" data-back="1">&lsaquo; Back to workouts</button></div>`) + (k === 'indoor' ? (canEdit(p.id) && lstep() === 'go' ? (S.hist ? liftHistory(p) : wCard(k, p) + liftSession(p)) : wCard(k, p) + liftPick(p)) : wCard(k, p));
 }
 
+// ---------- meals: photo, AI estimate, saved favorites ----------
+const MSLOTS = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+const defSlot = () => { const h = new Date().getHours(); return h < 10 ? 'Breakfast' : h < 14 ? 'Lunch' : h < 17 ? 'Snack' : 'Dinner'; };
+const mTot = rows => rows.reduce((a, r) => ({ c: a.c + r.calories, p: a.p + r.protein, cb: a.cb + r.carbs, f: a.f + r.fat }), { c: 0, p: 0, cb: 0, f: 0 });
+const mLine = r => `${r.calories} cal &middot; ${r.protein}g protein &middot; ${r.carbs}g carbs &middot; ${r.fat}g fat`;
+const blobB64 = b => new Promise(res => { const f = new FileReader(); f.onload = () => res(String(f.result).split(',')[1]); f.readAsDataURL(b); });
+const mThumb = r => { const u = S.urls[r.photo_path]; return `<div class="mth" ${u ? `data-pv="${esc(r.photo_path)}" data-cap="${esc(r.name)}" style="background-image:url('${u}')"` : ''}></div>`; };
+const mItems = r => (r.items || []).length ? `<div class="note" style="margin:2px 0 0;font-size:12px">${esc(r.items.map(i => i.name).join(', '))}</div>` : '';
+const mDays = kind => { const n = kind === 'tomorrow' ? [1] : kind === 'three' ? [0, 1, 2] : kind === 'week' ? Array.from({ length: (7 - parseYmd(TD).getDay()) % 7 + 1 }, (_, i) => i) : [0]; return n.map(k => addDays(TD, k)); };
 function vMeals() {
-  const rows = DAYN.map((d, i) => `<tr><td>${d}</td>${SLOTS.map(s => `<td contenteditable="true" class="ctl" data-meal="${i}|${s}">${esc(D.meals[i + '|' + s] || '')}</td>`).join('')}</tr>`).join('');
+  const p = viewed(), ed = editable() && canEdit(p.id), mine = r => r.user_id === p.id;
+  const today = (D.mlog || []).filter(r => mine(r) && r.day === TD), soon = (D.mlog || []).filter(r => mine(r) && r.day > TD).sort((a, b) => a.day < b.day ? -1 : 1);
+  const saved = (D.saved || []).filter(mine), t = mTot(today), slot = S.mxSlot || defSlot();
+  const tile = (v, l) => `<div class="mt"><b>${v}</b><span>${l}</span></div>`;
+  const row = r => `<div class="mrow">${mThumb(r)}<div class="mi"><span class="badge">${esc(r.slot)}</span> <b>${esc(r.name)}</b><div class="note" style="margin:3px 0 0">${mLine(r)}</div>${mItems(r)}${ed && !saved.some(x => x.name.toLowerCase() === r.name.toLowerCase()) ? `<button class="link" data-mxsave="${r.id}" style="margin-top:4px">Save as favorite</button>` : ''}</div>${ed ? `<button class="xbtn" data-mxdel="${r.id}" aria-label="Remove meal">&times;</button>` : ''}</div>`;
+  const add = ed ? `<div class="row" style="gap:8px;margin-top:14px"><select id="mslot" style="flex:0 0 118px">${MSLOTS.map(x => `<option ${x === slot ? 'selected' : ''}>${x}</option>`).join('')}</select><button class="btn ctl" data-mxadd="1" style="flex:1">Add a meal photo</button></div>` : '';
+  const favs = saved.length ? saved.map(r => `<div class="mrow">${mThumb(r)}<div class="mi"><b>${esc(r.name)}</b><div class="note" style="margin:3px 0 0">${mLine(r)}</div>${mItems(r)}${ed ? `<div class="row" style="gap:8px;margin-top:8px"><select id="mre-${r.id}" style="flex:1"><option value="today">Today</option><option value="tomorrow">Tomorrow</option><option value="three">Next 3 days</option><option value="week">Rest of the week</option></select><button class="btn sm ctl" data-mxre="${r.id}">Add</button></div>` : ''}</div>${ed ? `<button class="xbtn" data-mxsdel="${r.id}" aria-label="Delete favorite">&times;</button>` : ''}</div>`).join('') : '<p class="note" style="margin:8px 0 0">Meals you save show up here so you can add them again with one tap.</p>';
+  const rowsT = DAYN.map((d, i) => `<tr><td>${d}</td>${SLOTS.map(s => `<td contenteditable="true" class="ctl" data-meal="${i}|${s}">${esc(D.meals[i + '|' + s] || '')}</td>`).join('')}</tr>`).join('');
   return header('<em>Meals</em>') + `<div style="height:14px"></div>
-   <div class="card"><div class="lbl" style="margin-bottom:8px">Weekly plan (shared, tap to edit)</div><div><table class="table"><tr><th></th><th>Breakfast</th><th>Lunch</th><th>Dinner</th><th>Snack</th></tr>${rows}</table></div></div>
+   <div class="card"><div class="lbl" style="margin-bottom:10px">${p.id === S.me.id ? 'Today' : esc(p.name) + ' today'}</div>
+    <div class="mtot">${tile(t.c, 'cal')}${tile(t.p + 'g', 'protein')}${tile(t.cb + 'g', 'carbs')}${tile(t.f + 'g', 'fat')}</div>
+    <div style="margin-top:6px">${today.length ? today.map(row).join('') : '<p class="note" style="margin:12px 0 0">No meals logged yet today.</p>'}</div>${add}</div>
+   <div class="card"><div class="lbl">Saved meals</div>${favs}</div>
+   ${soon.length ? `<div class="card"><div class="lbl">Coming up</div>${soon.map(r => `<div class="row" style="border-top:1px solid var(--line);padding:8px 0;gap:10px"><span class="badge">${pretty(r.day)}</span><span style="flex:1;font-size:14px"><b>${esc(r.name)}</b> <span class="note">${esc(r.slot)}</span></span>${ed ? `<button class="xbtn" data-mxdel="${r.id}" aria-label="Remove">&times;</button>` : ''}</div>`).join('')}</div>` : ''}
+   <div class="card"><div class="lbl" style="margin-bottom:8px">Weekly plan (shared, tap to edit)</div><div><table class="table"><tr><th></th><th>Breakfast</th><th>Lunch</th><th>Dinner</th><th>Snack</th></tr>${rowsT}</table></div></div>
    <div class="card"><div class="lbl" style="margin-bottom:6px">Grocery list (shared)</div>
    ${D.groceries.map(g => `<div class="row" style="border-top:1px solid var(--line)"><button class="groc ${g.done ? 'done' : ''}" style="border:0;flex:1" data-g="${g.id}"><span class="box ${g.done ? 'on' : ''}">${g.done ? tick : ''}</span><span>${esc(g.item)}</span></button><button class="xbtn" data-gdel="${g.id}" aria-label="Remove">&times;</button></div>`).join('')}
    <div class="row" style="margin-top:14px"><input type="text" id="gnew" placeholder="Add an item" maxlength="200"><button class="btn sm" id="gadd">Add</button></div></div>`;
 }
-
+// The review sheet: photo, what the AI thinks is in it, editable ingredients and macros, then log.
+function drawMx() {
+  let el = $('mx'); const m = S.mx;
+  if (!m) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement('div'); el.id = 'mx'; document.body.appendChild(el); }
+  const keep = el.scrollTop, num = (k, l) => `<label class="fld"><span>${l}</span><input type="number" inputmode="numeric" min="0" data-mxf="${k}" value="${m[k]}"></label>`;
+  const busy = m.step === 'analyzing' || m.step === 'saving';
+  el.innerHTML = `<div class="in">${m.url ? `<img src="${m.url}" alt="Your meal" style="width:100%;max-height:240px;object-fit:cover;border-radius:18px">` : ''}
+   ${busy ? `<div style="text-align:center;padding:26px 0"><div class="lbl">${m.step === 'saving' ? 'Saving' : 'Looking at your meal'}</div><p class="note">${m.step === 'saving' ? 'One second.' : 'Figuring out what is on the plate.'}</p></div>` : `
+   ${m.err ? `<p class="note" style="color:var(--acc2);margin:12px 0 0">${esc(m.err)}</p>` : '<p class="note" style="margin:12px 0 0">Here is my best guess. Fix anything that is off, then update the macros.</p>'}
+   <div class="lbl" style="margin-top:16px">Meal name</div><input type="text" data-mxf="name" value="${esc(m.name)}" maxlength="80" placeholder="Avocado toast">
+   <div class="lbl" style="margin-top:16px">Ingredients</div>
+   ${m.items.map((i, k) => `<div class="row" style="gap:8px;margin-top:8px"><input type="text" data-mxi="${k}|qty" value="${esc(i.qty)}" placeholder="Amount" style="flex:0 0 36%" maxlength="60"><input type="text" data-mxi="${k}|name" value="${esc(i.name)}" placeholder="Ingredient" maxlength="80"><button class="xbtn" data-mx="deli" data-i="${k}" aria-label="Remove ingredient">&times;</button></div>`).join('')}
+   <div class="row" style="gap:8px;margin-top:10px"><button class="btn ghost sm" data-mx="addi">Add ingredient</button><button class="btn sm" data-mx="recalc">Update macros</button></div>
+   ${m.note ? `<p class="note" style="margin:10px 0 0">${esc(m.note)}</p>` : ''}
+   <div class="lbl" style="margin-top:18px">Macros for this meal</div>
+   <div class="lgrid" style="grid-template-columns:1fr 1fr">${num('cal', 'Calories')}${num('pro', 'Protein (g)')}</div><div class="lgrid" style="grid-template-columns:1fr 1fr">${num('carb', 'Carbs (g)')}${num('fat', 'Fat (g)')}</div>
+   <div class="lbl" style="margin-top:16px">Which meal is this</div><select data-mxf="slot">${MSLOTS.map(x => `<option ${x === m.slot ? 'selected' : ''}>${x}</option>`).join('')}</select>
+   <label class="check" style="margin-top:14px"><input type="checkbox" data-mxf="save" ${m.save ? 'checked' : ''}> Save it so I can add it again with one tap</label>
+   <div class="row" style="gap:10px;margin-top:18px"><button class="btn" data-mx="log" style="flex:1">Log meal</button><button class="btn ghost" data-mx="cancel">Cancel</button></div>`}
+  </div>`;
+  el.scrollTop = keep;
+}
+async function mxAI(mode) {
+  const m = S.mx; if (!m) return; m.step = 'analyzing'; m.err = ''; drawMx();
+  try {
+    const body = mode === 'recalc' ? { mode, name: m.name, items: m.items.filter(i => i.name.trim()), image: m.b64 } : { mode, image: m.b64 };
+    const { data, error } = await sb.functions.invoke('analyze-meal', { body });
+    if (S.mx !== m) return;
+    if (error || !data || data.error) m.err = data && data.error === 'no_key' ? "AI isn't connected yet, so type the meal in below." : "Couldn't analyze that one. Check the details below, or try again.";
+    else {
+      if (mode === 'identify' || !m.name.trim()) m.name = data.name;
+      if (mode === 'identify') m.items = data.items;
+      m.cal = data.calories; m.pro = data.protein; m.carb = data.carbs; m.fat = data.fat; m.note = data.note || '';
+    }
+  } catch (e) { if (S.mx !== m) return; m.err = "Couldn't reach the analyzer. Type the details below, or try again."; }
+  m.step = 'review'; drawMx();
+}
+async function mxStart(file) {
+  const m = S.mx = { step: 'analyzing', slot: S.mxSlot || defSlot(), name: '', items: [], cal: 0, pro: 0, carb: 0, fat: 0, note: '', err: '', save: true };
+  drawMx();
+  try { const blob = await compress(file, 1024); m.blob = blob; m.url = URL.createObjectURL(blob); m.b64 = await blobB64(blob); drawMx(); await mxAI('identify'); }
+  catch (e) { if (S.mx !== m) return; m.err = "Couldn't read that photo."; m.step = 'review'; drawMx(); }
+}
+async function mxLog() {
+  const m = S.mx; if (!m) return; const name = m.name.trim(); if (!name) { toast('Give the meal a name.'); return; }
+  const u = actor().id; m.step = 'saving'; drawMx();
+  try {
+    let path = null;
+    if (m.blob) { path = `${u}/meals/${crypto.randomUUID()}.jpg`; const up = await sb.storage.from('progress-photos').upload(path, m.blob, { contentType: 'image/jpeg' }); if (up.error) throw up.error; S.urls[path] = m.url; }
+    const row = { user_id: u, name, photo_path: path, items: m.items.filter(i => i.name.trim()), calories: m.cal, protein: m.pro, carbs: m.carb, fat: m.fat };
+    await must(sb.from('meal_log').insert({ ...row, day: TD, slot: m.slot }));
+    if (m.save) await must(sb.from('saved_meals').insert(row));
+    S.mx = null; drawMx(); await loadAll(); render(); toast('Meal logged.');
+  } catch (e) { if (S.mx === m) { m.step = 'review'; drawMx(); } toast('Could not save: ' + (e.message || e)); }
+}
+function dropPhoto(path) {   // delete the file only when nothing else points at it
+  if (!path) return; const used = [...(D.mlog || []), ...(D.saved || [])].some(r => r.photo_path === path);
+  if (!used) sb.storage.from('progress-photos').remove([path]);
+}
+async function mxAction(d, t) {
+  const m = S.mx, num = v => Math.max(0, Math.round(+v || 0));
+  if (d.mxadd) { S.mxSlot = $('mslot').value; $('mph').click(); return; }
+  if (d.mxre) {
+    const r = (D.saved || []).find(x => x.id === d.mxre); if (!r || !editable()) return;
+    const days = mDays($('mre-' + r.id).value), slot = $('mslot') ? $('mslot').value : defSlot(), u = actor().id;
+    await must(sb.from('meal_log').insert(days.map(day => ({ user_id: u, day, slot, name: r.name, photo_path: r.photo_path, items: r.items, calories: r.calories, protein: r.protein, carbs: r.carbs, fat: r.fat }))));
+    await loadAll(); render(); toast(days.length === 1 ? 'Added.' : `Added to ${days.length} days.`); return;
+  }
+  if (d.mxdel) { const r = (D.mlog || []).find(x => x.id === d.mxdel); D.mlog = (D.mlog || []).filter(x => x.id !== d.mxdel); render(); const { error } = await sb.from('meal_log').delete().eq('id', d.mxdel); if (error) { toast(error.message); await loadAll(); render(); } else if (r) dropPhoto(r.photo_path); return; }
+  if (d.mxsdel) { const r = (D.saved || []).find(x => x.id === d.mxsdel); D.saved = (D.saved || []).filter(x => x.id !== d.mxsdel); render(); const { error } = await sb.from('saved_meals').delete().eq('id', d.mxsdel); if (error) { toast(error.message); await loadAll(); render(); } else if (r) dropPhoto(r.photo_path); return; }
+  if (d.mxsave) { const r = (D.mlog || []).find(x => x.id === d.mxsave); if (!r) return; await must(sb.from('saved_meals').insert({ user_id: r.user_id, name: r.name, photo_path: r.photo_path, items: r.items, calories: r.calories, protein: r.protein, carbs: r.carbs, fat: r.fat })); await loadAll(); render(); toast('Saved. Find it under Saved meals.'); return; }
+  if (!m) return;
+  if (d.mx === 'cancel') { const p = m.url; S.mx = null; drawMx(); return; }
+  if (d.mx === 'addi') { m.items.push({ name: '', qty: '' }); drawMx(); return; }
+  if (d.mx === 'deli') { m.items.splice(+d.i, 1); drawMx(); return; }
+  if (d.mx === 'recalc') { if (!m.items.some(i => i.name.trim())) { toast('Add at least one ingredient first.'); return; } return mxAI('recalc'); }
+  if (d.mx === 'log') return mxLog();
+}
+document.addEventListener('input', e => {
+  const t = e.target, m = S.mx; if (!m) return;
+  if (t.dataset.mxf) { const k = t.dataset.mxf; if (k === 'save') m.save = t.checked; else if (k === 'name' || k === 'slot') m[k] = t.value; else m[k] = Math.max(0, Math.round(+t.value || 0)); }
+  else if (t.dataset.mxi) { const [i, f] = t.dataset.mxi.split('|'); if (m.items[+i]) m.items[+i][f] = t.value; }
+});
 function jugsFor(p) { return p.water_style === 'teacup' ? [40, 40, 40] : [40, 40, 40, 8]; }
 // Same wording the server sends. Keep in sync with MESSAGES in supabase/functions/water-reminders/index.ts.
 const REMINDER_MSG = { taylor: "Go fill er' up! You're at {oz} of 128oz.", daddy: "Drink up pussy! You're only at {oz} of 128oz.", tyler: "Drink up pussy! You're only at {oz} of 128oz." };
@@ -992,6 +1099,7 @@ document.addEventListener('click', async e => {
   if (t.id === 'pushTest') { try { const reg = await navigator.serviceWorker.ready; await reg.showNotification('Water Reminder', { body: reminderText(S.me, dailyRow(S.me.id, TD).water_oz), icon: 'icon-180.png' }); } catch (e) { toast('Could not show it: ' + e.message); } return; }
   if (t.id === 'atoggle') { S.authMode = S.authMode === 'up' ? 'in' : 'up'; render(); return; }
   if (!S.me) return;
+  if (d.mx || d.mxadd || d.mxre || d.mxdel || d.mxsdel || d.mxsave) { await mxAction(d, t); return; }
   if (d.funadd) { $('fph').click(); return; }
   if (d.fundel) {
     if (!confirm('Delete this photo for good?')) return;
@@ -1031,16 +1139,23 @@ document.addEventListener('click', async e => {
   }
   if (d.msel) { const sel = lsel(), i = sel.indexOf(d.msel); if (i >= 0) sel.splice(i, 1); else sel.push(d.msel); lSave(); render(); return; }
   if (t.id === 'lsubmit') { if (!lsel().length) return; setLstep('plan'); render(); return; }
+  if (t.id === 'csaveq' || t.id === 'psaveq') {
+    if (!editable()) return;
+    const cx = t.id === 'csaveq', c = cx ? S.cd : { type: S.wtype.indoor || 'Lift', sel: S.lsel, plan: S.plan }, day = cx ? S.calSel : TD;
+    if (!c.sel.length) { toast('Pick a muscle group first.'); return; }
+    const plan = {}; c.sel.forEach(m => { plan[m] = (c.plan[m] || []).slice(); });
+    const labels = c.type === 'Lift' ? c.sel.map(m => MNAME[m]) : [c.type];
+    S.cdEditing = null; CTX = false; saveDayPlan(u, day, labels, { type: c.type, sel: c.sel.slice(), plan }); toast('Plan saved for ' + pretty(day) + '.'); return;
+  }
   if (t.id === 'csave') {
     if (!editable()) return;
     const c = S.cd, day = S.calSel, plan = {}; c.sel.forEach(m => { plan[m] = (c.plan[m] || []).slice(); });
     if (!c.sel.some(m => plan[m].length)) { toast('Pick at least one workout first.'); return; }
     const det = { type: c.type, sel: c.sel.slice(), plan }, labels = c.type === 'Lift' ? c.sel.map(m => MNAME[m]) : [c.type];
-    const items = planOf(u, day).slice(); labels.forEach(l => { if (!items.includes(l)) items.push(l); });
-    S.cdEditing = null; CTX = false; saveDayPlan(u, day, items, det); toast('Workout saved for ' + pretty(day) + '.'); return;
+    S.cdEditing = null; CTX = false; saveDayPlan(u, day, labels, det); toast('Workout saved for ' + pretty(day) + '.'); return;
   }
   if (d.cedit) { const det = detailOf(u, S.calSel); if (!det) return; S.cd = { type: det.type, sel: det.sel.slice(), plan: JSON.parse(JSON.stringify(det.plan)), step: 'plan' }; S.cdEditing = S.calSel; S.cdDay = S.calSel; render(); return; }
-  if (d.cdel) { if (!editable()) return; saveDayPlan(u, S.calSel, planOf(u, S.calSel), null); return; }
+  if (d.cdel) { if (!editable()) return; saveDayPlan(u, S.calSel, [], null); return; }
   if (d.cstart) {
     if (!editable()) return;
     const det = detailOf(u, TD); if (!det) return;
@@ -1247,6 +1362,7 @@ document.addEventListener('change', async e => {
     render();
   } return; }
   if (t.id === 'lpick') { const n = $('lname'); if (t.value === '__custom') { n.style.display = ''; n.value = ''; n.focus(); } else { n.style.display = 'none'; n.value = t.value; } return; }
+  if (t.id === 'mph' && t.files[0]) { const f = t.files[0]; t.value = ''; mxStart(f); return; }
   if (t.id === 'fph' && t.files.length) {
     const files = [...t.files]; t.value = ''; const u = actor().id; let n = 0;
     toast('Saving ' + (files.length === 1 ? 'photo' : files.length + ' photos') + '...');
