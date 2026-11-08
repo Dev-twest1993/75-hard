@@ -333,6 +333,15 @@ function calTile(v) {
   if (view === 'day') {
     const dt = parseYmd(sel), title = dt.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
     main = `<div class="row sp" style="margin-bottom:6px"><button class="btn ghost sm" data-calstep="-1" aria-label="Previous day">&lsaquo;</button><div style="text-align:center"><b style="font-size:16px">${title}</b>${sel === TD ? '<div><span class="badge good">Today</span></div>' : ''}</div><button class="btn ghost sm" data-calstep="1" aria-label="Next day">&rsaquo;</button></div>`;
+  } else if (view === 'week') {
+    const w0 = S.calWk || (S.calWk = sel), days = Array.from({ length: 7 }, (_, i) => addDays(w0, i));
+    const kind = ds => { const dt = detailOf(v.id, ds), pl = planOf(v.id, ds), r = wRow(v.id, ds, 'indoor');
+      if (dt) return [dt.type === 'Lift' ? 'Lifting' : dt.type, dt.type === 'Lift' ? dt.sel.map(m => MNAME[m] || m).join(', ') : ''];
+      if (r && r.type) return [r.type === 'Lift' ? 'Lifting' : r.type, 'Logged'];
+      if (pl.length) return [pl.join(' + '), '']; return ['', '']; };
+    const rows = days.map(ds => { const [t, sub] = kind(ds), dt = parseYmd(ds);
+      return `<button class="wd ${ds === TD ? 'today' : ''} ${ds === sel ? 'sel' : ''}" data-calday="${ds}"><span class="dn"><small>${dt.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()}</small><b>${dt.getDate()}</b></span><span class="wt">${t ? `<b>${esc(t)}</b>${sub ? `<i>${esc(sub)}</i>` : ''}` : '<i>Nothing planned</i>'}</span></button>`; }).join('');
+    main = `<div class="row sp" style="margin-bottom:8px"><button class="btn ghost sm" data-calweek="-1" aria-label="Previous week">&lsaquo;</button><b style="font-size:16px">${pretty(days[0])} - ${pretty(days[6])}</b><button class="btn ghost sm" data-calweek="1" aria-label="Next week">&rsaquo;</button></div><div class="wk">${rows}</div>`;
   } else {
     const [y, m] = S.calMonth.split('-').map(Number), first = new Date(y, m - 1, 1), nd = new Date(y, m, 0).getDate();
     const cells = []; for (let i = 0; i < first.getDay(); i++) cells.push('<span></span>');
@@ -365,7 +374,7 @@ function calTile(v) {
   } else if (det) {
     go = `<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px"><div class="lbl">Planned workout</div><div style="margin-top:8px;font-size:14px;line-height:1.5">${detSummary(det)}</div></div>`;
   }
-  return `<div class="card dtile" data-tile="cal">${GRIP}<div class="row sp" style="padding-right:44px;margin-bottom:12px"><div class="lbl">Calendar</div><div class="seg">${seg('day', 'Day')}${seg('month', 'Month')}</div></div>${main}${planner}${go}</div>`;
+  return `<div class="card dtile" data-tile="cal">${GRIP}<div class="row sp" style="padding-right:44px;margin-bottom:12px"><div class="lbl">Calendar</div><div class="seg">${seg('day', 'Day')}${seg('week', 'Week')}${seg('month', 'Month')}</div></div>${main}${planner}${go}</div>`;
 }
 async function saveDayPlan(u, day, items, detail) {
   const k = u + '|' + day, det = detail === undefined ? D.detail[k] : detail;
@@ -714,20 +723,27 @@ function aminoCard(p, dr) {
   const r = ring(130, 12, on ? 1 : 0, WATERBLUE, `<span class="num" style="font-size:30px;font-weight:800">${on ? tick : '8 oz'}</span><span class="lbl">amino</span>`);
   return `<div class="card" style="text-align:center">${ed ? `<button class="ctl" data-amino="1" style="background:none;border:0;padding:0;color:inherit" aria-label="Amino drink">${r}</button>` : r}</div>`;
 }
+const isTaylor = p => /^taylor$/i.test(String(p && p.name).trim());
+const exOz = r => (r.amino ? 8 : 0) + (r.coffee_n || 0) * 6 + (r.protein_n || 0) * 12;   // ounces from amino, coffee and protein water
+function extrasCard(p, dr) {
+  const ed = editable() && canEdit(p.id), row = (k, name, oz, n) => `<div class="xtra"><div class="xl"><b>${name}</b><span>${oz} oz each &middot; ${n * oz} oz so far</span></div>${ed ? `<button class="btn ghost sm ctl" data-xtra="${k}" data-dx="-1" aria-label="Remove one ${name}">-</button>` : ''}<span class="xn">${n}</span>${ed ? `<button class="btn sm ctl" data-xtra="${k}" data-dx="1" aria-label="Add one ${name}">+</button>` : ''}</div>`;
+  return `<div class="card"><div class="lbl" style="margin-bottom:4px">Also counts toward your 128</div>${row('coffee_n', 'Coffee', 6, dr.coffee_n || 0)}${row('protein_n', 'Protein water', 12, dr.protein_n || 0)}</div>`;
+}
 function vWater() {
   if (S.view === 'split' && partner()) return splitWater();
-  const p = viewed(), dr = dailyRow(p.id, TD), oz = dr.water_oz, am = dr.amino ? 8 : 0, WC = WATERBLUE, js = jugsFor(p), tea = p.water_style === 'teacup';
-  let used = 0; const items = js.map((sz, i) => { used += sz; return { sz, i, filled: (isDaddy(p) && js.length === 4 && i === 3) ? !!am : oz - am >= used }; });
+  const p = viewed(), dr = dailyRow(p.id, TD), oz = dr.water_oz, am = dr.amino ? 8 : 0, ex = exOz(dr), WC = WATERBLUE, js = jugsFor(p), tea = p.water_style === 'teacup';
+  let used = 0; const items = js.map((sz, i) => { used += sz; return { sz, i, filled: (isDaddy(p) && js.length === 4 && i === 3) ? !!am : oz - ex >= used }; });
   const jugSvg = (sz, filled, anim) => { const w = sz === 40 ? 56 : 44, h = sz === 40 ? 96 : 76;
     const body = anim ? 'transparent' : (filled ? WC : 'transparent');
     return `<svg width="${w}" height="${h}" viewBox="0 0 56 96"><rect x="20" y="2" width="16" height="8" rx="3" fill="none" stroke="${WC}" stroke-width="2"/>${anim ? `<rect class="liquid" x="6" y="12" width="44" height="82" rx="14" fill="${WC}" fill-opacity=".85"/>` : ''}<rect x="6" y="12" width="44" height="82" rx="14" fill="${body}" fill-opacity=".85" stroke="${WC}" stroke-width="2.5" style="filter:drop-shadow(0 0 ${filled ? 9 : 2}px ${WC})"/></svg>`; };
   const cup = f => `<svg width="56" height="64" viewBox="0 0 56 64"><path d="M8 18h34v20a14 14 0 01-14 14h-6A14 14 0 018 38z" fill="${f ? WC : 'transparent'}" fill-opacity=".85" stroke="${WC}" stroke-width="2.5" style="filter:drop-shadow(0 0 ${f ? 9 : 2}px ${WC})"/><path d="M42 24h4a6 6 0 010 14h-5" fill="none" stroke="${WC}" stroke-width="2.5"/><path d="M18 8c-2 3 2 4 0 7M28 8c-2 3 2 4 0 7" fill="none" stroke="${WC}" stroke-width="2" stroke-linecap="round" opacity=".7"/></svg>`;
   const aj = isDaddy(p) && js.length === 4;
   const jugBtns = items.map(x => { const am8 = aj && x.i === 3; return `<button class="jug ctl" ${am8 ? 'data-amino="1"' : `data-jug="${x.i}"`}>${jugSvg(x.sz, x.filled, am8 && S.anim === 'amino' && x.filled)}<span>${x.sz} OZ${am8 ? ' &middot; AMINO' : ''}</span></button>`; }).join('');
-  const cupBtn = tea ? `<button class="jug ctl" data-cup="1">${cup(oz >= 128)}<span>TEA &middot; 8 OZ</span></button>` : '';
+  const cupBtn = tea ? `<button class="jug ctl" data-cup="1">${cup(oz - ex >= 128)}<span>TEA &middot; 8 OZ</span></button>` : '';
   return header('<em>Water</em>') + testBar(p) + `<div class="card" style="text-align:center">${ring(176, 12, Math.min(oz / WATER, 1), WC, `<span class="num" style="font-size:40px;font-weight:800">${oz}</span><span class="lbl">of 128 oz</span>`)}
    <div class="jugs">${jugBtns}${cupBtn}</div><p class="note">Tap each jug when you finish it.${tea ? ' Your last 8 oz is the tea at night.' : ''}</p></div>
    ${aminoCard(p, dr)}
+   ${isTaylor(p) ? extrasCard(p, dr) : ''}
    ${pushCard()}`;
 }
 
@@ -997,7 +1013,8 @@ document.addEventListener('click', async e => {
   if (d.phopen) { if (editable()) $('ph').click(); return; }
   if (d.tab) { S.tab = d.tab; S.sub = null; $('app').scrollTo(0, 0); render(); return; }
   if (d.calopen) { S.tab = 'workouts'; S.sub = 'indoor'; $('app').scrollTo(0, 0); render(); return; }
-  if (d.calview) { S.calView = d.calview; render(); return; }
+  if (d.calview) { S.calView = d.calview; if (d.calview === 'week') S.calWk = S.calSel; render(); return; }
+  if (d.calweek) { S.calWk = addDays(S.calWk || S.calSel, 7 * +d.calweek); render(); return; }
   if (d.calday) { S.calSel = d.calday; render(); return; }
   if (d.calstep) { S.calSel = addDays(S.calSel, +d.calstep); S.calMonth = S.calSel.slice(0, 7); render(); return; }
   if (d.caltoday) { S.calSel = TD; S.calMonth = TD.slice(0, 7); render(); return; }
@@ -1189,8 +1206,9 @@ document.addEventListener('click', async e => {
   }
   if (d.fin) { const row = wRow(u, today, d.fin); return saveWorkout({ ...row, done_at: new Date().toISOString() }); }
   if (d.amino) { const r = dailyRow(u, today), on = !!r.amino; if (!on) { S.anim = 'amino'; setTimeout(() => { S.anim = null; }, 1500); } return saveDaily(today, { amino: !on, water_oz: on ? Math.max(0, r.water_oz - 8) : r.water_oz + 8 }); }
-  if (d.jug !== undefined) { const js = jugsFor(viewed()), am = dailyRow(u, today).amino ? 8 : 0, idx = +d.jug, oz = dailyRow(u, today).water_oz - am, upto = js.slice(0, idx + 1).reduce((a, b) => a + b, 0), below = js.slice(0, idx).reduce((a, b) => a + b, 0); return saveDaily(today, { water_oz: (oz >= upto ? below : upto) + am }); }
-  if (d.cup) return saveDaily(today, { water_oz: dailyRow(u, today).water_oz >= 128 ? 120 : 128 });
+  if (d.jug !== undefined) { const js = jugsFor(viewed()), am = exOz(dailyRow(u, today)), idx = +d.jug, oz = dailyRow(u, today).water_oz - am, upto = js.slice(0, idx + 1).reduce((a, b) => a + b, 0), below = js.slice(0, idx).reduce((a, b) => a + b, 0); return saveDaily(today, { water_oz: (oz >= upto ? below : upto) + am }); }
+  if (d.cup) { const r = dailyRow(u, today), ex = exOz(r); return saveDaily(today, { water_oz: (r.water_oz - ex >= 128 ? 120 : 128) + ex }); }
+  if (d.xtra) { const r = dailyRow(u, today), per = d.xtra === 'coffee_n' ? 6 : 12, cur = r[d.xtra] || 0, nx = Math.max(0, cur + +d.dx); if (nx === cur) return; return saveDaily(today, { [d.xtra]: nx, water_oz: Math.max(0, r.water_oz + (nx - cur) * per) }); }
   if (d.rclose) {
     const cur = dailyRow(u, today).pages, next = cur >= 10 ? 0 : 10, delta = next - cur;
     await saveDaily(today, { pages: next });
