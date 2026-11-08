@@ -646,51 +646,51 @@ function vWorkoutPage(k, p) {
 const MSLOTS = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
 const defSlot = () => { const h = new Date().getHours(); return h < 10 ? 'Breakfast' : h < 14 ? 'Lunch' : h < 17 ? 'Snack' : 'Dinner'; };
 const mTot = rows => rows.reduce((a, r) => ({ c: a.c + r.calories, p: a.p + r.protein, cb: a.cb + r.carbs, f: a.f + r.fat }), { c: 0, p: 0, cb: 0, f: 0 });
-const mLine = r => `${r.calories} cal &middot; ${r.protein}g protein &middot; ${r.carbs}g carbs &middot; ${r.fat}g fat`;
+const mLine = r => `${r.calories} cal &middot; ${r.protein}P &middot; ${r.carbs}C &middot; ${r.fat}F`;
 const blobB64 = b => new Promise(res => { const f = new FileReader(); f.onload = () => res(String(f.result).split(',')[1]); f.readAsDataURL(b); });
 const mThumb = r => { const u = S.urls[r.photo_path]; return `<div class="mth" ${u ? `data-pv="${esc(r.photo_path)}" data-cap="${esc(r.name)}" style="background-image:url('${u}')"` : ''}></div>`; };
-const mItems = r => (r.items || []).length ? `<div class="note" style="margin:2px 0 0;font-size:12px">${esc(r.items.map(i => i.name).join(', '))}</div>` : '';
-const mDays = kind => { const n = kind === 'tomorrow' ? [1] : kind === 'three' ? [0, 1, 2] : kind === 'week' ? Array.from({ length: (7 - parseYmd(TD).getDay()) % 7 + 1 }, (_, i) => i) : [0]; return n.map(k => addDays(TD, k)); };
+const mDays = kind => { const n = kind === 'tomorrow' ? [1] : kind === 'week' ? Array.from({ length: (7 - parseYmd(TD).getDay()) % 7 + 1 }, (_, i) => i) : [0]; return n.map(k => addDays(TD, k)); };
+const mUses = (uid, name) => (D.mlog || []).filter(r => r.user_id === uid && r.name.toLowerCase() === name.toLowerCase()).length;
 function vMeals() {
   const p = viewed(), ed = editable() && canEdit(p.id), mine = r => r.user_id === p.id;
   const today = (D.mlog || []).filter(r => mine(r) && r.day === TD), soon = (D.mlog || []).filter(r => mine(r) && r.day > TD).sort((a, b) => a.day < b.day ? -1 : 1);
-  const saved = (D.saved || []).filter(mine), t = mTot(today), slot = S.mxSlot || defSlot();
+  const saved = (D.saved || []).filter(mine).map(r => ({ r, n: mUses(p.id, r.name) })).sort((a, b) => b.n - a.n).map(x => x.r), t = mTot(today);
   const tile = (v, l) => `<div class="mt"><b>${v}</b><span>${l}</span></div>`;
-  const row = r => `<div class="mrow">${mThumb(r)}<div class="mi"><span class="badge">${esc(r.slot)}</span> <b>${esc(r.name)}</b><div class="note" style="margin:3px 0 0">${mLine(r)}</div>${mItems(r)}${ed && !saved.some(x => x.name.toLowerCase() === r.name.toLowerCase()) ? `<button class="link" data-mxsave="${r.id}" style="margin-top:4px">Save as favorite</button>` : ''}</div>${ed ? `<button class="xbtn" data-mxdel="${r.id}" aria-label="Remove meal">&times;</button>` : ''}</div>`;
-  const add = ed ? `<div class="row" style="gap:8px;margin-top:14px"><select id="mslot" style="flex:0 0 118px">${MSLOTS.map(x => `<option ${x === slot ? 'selected' : ''}>${x}</option>`).join('')}</select><button class="btn ctl" data-mxadd="1" style="flex:1">Add a meal photo</button></div>` : '';
-  const favs = saved.length ? saved.map(r => `<div class="mrow">${mThumb(r)}<div class="mi"><b>${esc(r.name)}</b><div class="note" style="margin:3px 0 0">${mLine(r)}</div>${mItems(r)}${ed ? `<div class="row" style="gap:8px;margin-top:8px"><select id="mre-${r.id}" style="flex:1"><option value="today">Today</option><option value="tomorrow">Tomorrow</option><option value="three">Next 3 days</option><option value="week">Rest of the week</option></select><button class="btn sm ctl" data-mxre="${r.id}">Add</button></div>` : ''}</div>${ed ? `<button class="xbtn" data-mxsdel="${r.id}" aria-label="Delete favorite">&times;</button>` : ''}</div>`).join('') : '<p class="note" style="margin:8px 0 0">Meals you save show up here so you can add them again with one tap.</p>';
+  const row = r => `<div class="mrow">${mThumb(r)}<div class="mi"><b>${esc(r.name)}</b> <span class="badge">${esc(r.slot)}</span><div class="note" style="margin:3px 0 0">${mLine(r)}</div></div>${ed ? `<button class="xbtn" data-mxdel="${r.id}" aria-label="Remove meal">&times;</button>` : ''}</div>`;
+  const add = ed ? `<button class="btn ctl" data-mxadd="1" style="width:100%;margin-top:14px">Add a meal photo</button><div style="text-align:center;margin-top:8px"><button class="link" data-mxtype="1">or type it in</button></div>` : '';
+  const favs = saved.length ? saved.map(r => `<div class="mrow" style="align-items:center">${mThumb(r)}<div class="mi"><b>${esc(r.name)}</b><div class="note" style="margin:3px 0 0">${mLine(r)}</div>${S.mopen === r.id && ed ? `<div class="row" style="gap:8px;margin-top:8px"><select id="mre-${r.id}" style="flex:1"><option value="tomorrow">Tomorrow</option><option value="week">Rest of the week</option></select><button class="btn ghost sm ctl" data-mxre="${r.id}">Add</button><button class="btn ghost sm ctl" data-mxsdel="${r.id}">Delete</button></div>` : ''}</div>${ed ? `<button class="btn sm ctl" data-mxq="${r.id}" aria-label="Add ${esc(r.name)} to today">+ Add</button><button class="xbtn" data-mxmore="${r.id}" aria-label="More options">&#8943;</button>` : ''}</div>`).join('') : '<p class="note" style="margin:8px 0 0">Every meal you log is remembered here. Your most common ones rise to the top.</p>';
   const rowsT = DAYN.map((d, i) => `<tr><td>${d}</td>${SLOTS.map(s => `<td contenteditable="true" class="ctl" data-meal="${i}|${s}">${esc(D.meals[i + '|' + s] || '')}</td>`).join('')}</tr>`).join('');
   return header('<em>Meals</em>') + `<div style="height:14px"></div>
    <div class="card"><div class="lbl" style="margin-bottom:10px">${p.id === S.me.id ? 'Today' : esc(p.name) + ' today'}</div>
     <div class="mtot">${tile(t.c, 'cal')}${tile(t.p + 'g', 'protein')}${tile(t.cb + 'g', 'carbs')}${tile(t.f + 'g', 'fat')}</div>
     <div style="margin-top:6px">${today.length ? today.map(row).join('') : '<p class="note" style="margin:12px 0 0">No meals logged yet today.</p>'}</div>${add}</div>
-   <div class="card"><div class="lbl">Saved meals</div>${favs}</div>
+   <div class="card"><div class="lbl">Your meals, one tap</div>${favs}</div>
    ${soon.length ? `<div class="card"><div class="lbl">Coming up</div>${soon.map(r => `<div class="row" style="border-top:1px solid var(--line);padding:8px 0;gap:10px"><span class="badge">${pretty(r.day)}</span><span style="flex:1;font-size:14px"><b>${esc(r.name)}</b> <span class="note">${esc(r.slot)}</span></span>${ed ? `<button class="xbtn" data-mxdel="${r.id}" aria-label="Remove">&times;</button>` : ''}</div>`).join('')}</div>` : ''}
    <div class="card"><div class="lbl" style="margin-bottom:8px">Weekly plan (shared, tap to edit)</div><div><table class="table"><tr><th></th><th>Breakfast</th><th>Lunch</th><th>Dinner</th><th>Snack</th></tr>${rowsT}</table></div></div>
    <div class="card"><div class="lbl" style="margin-bottom:6px">Grocery list (shared)</div>
    ${D.groceries.map(g => `<div class="row" style="border-top:1px solid var(--line)"><button class="groc ${g.done ? 'done' : ''}" style="border:0;flex:1" data-g="${g.id}"><span class="box ${g.done ? 'on' : ''}">${g.done ? tick : ''}</span><span>${esc(g.item)}</span></button><button class="xbtn" data-gdel="${g.id}" aria-label="Remove">&times;</button></div>`).join('')}
    <div class="row" style="margin-top:14px"><input type="text" id="gnew" placeholder="Add an item" maxlength="200"><button class="btn sm" id="gadd">Add</button></div></div>`;
 }
-// The review sheet: photo, what the AI thinks is in it, editable ingredients and macros, then log.
+// The confirm sheet: "I'm seeing these. Add or remove anything, then confirm."
 function drawMx() {
   let el = $('mx'); const m = S.mx;
   if (!m) { if (el) el.remove(); return; }
   if (!el) { el = document.createElement('div'); el.id = 'mx'; document.body.appendChild(el); }
   const keep = el.scrollTop, num = (k, l) => `<label class="fld"><span>${l}</span><input type="number" inputmode="numeric" min="0" data-mxf="${k}" value="${m[k]}"></label>`;
   const busy = m.step === 'analyzing' || m.step === 'saving';
-  el.innerHTML = `<div class="in">${m.url ? `<img src="${m.url}" alt="Your meal" style="width:100%;max-height:240px;object-fit:cover;border-radius:18px">` : ''}
-   ${busy ? `<div style="text-align:center;padding:26px 0"><div class="lbl">${m.step === 'saving' ? 'Saving' : 'Looking at your meal'}</div><p class="note">${m.step === 'saving' ? 'One second.' : 'Figuring out what is on the plate.'}</p></div>` : `
-   ${m.err ? `<p class="note" style="color:var(--acc2);margin:12px 0 0">${esc(m.err)}</p>` : '<p class="note" style="margin:12px 0 0">Here is my best guess. Fix anything that is off, then update the macros.</p>'}
-   <div class="lbl" style="margin-top:16px">Meal name</div><input type="text" data-mxf="name" value="${esc(m.name)}" maxlength="80" placeholder="Avocado toast">
-   <div class="lbl" style="margin-top:16px">Ingredients</div>
-   ${m.items.map((i, k) => `<div class="row" style="gap:8px;margin-top:8px"><input type="text" data-mxi="${k}|qty" value="${esc(i.qty)}" placeholder="Amount" style="flex:0 0 36%" maxlength="60"><input type="text" data-mxi="${k}|name" value="${esc(i.name)}" placeholder="Ingredient" maxlength="80"><button class="xbtn" data-mx="deli" data-i="${k}" aria-label="Remove ingredient">&times;</button></div>`).join('')}
-   <div class="row" style="gap:8px;margin-top:10px"><button class="btn ghost sm" data-mx="addi">Add ingredient</button><button class="btn sm" data-mx="recalc">Update macros</button></div>
+  el.innerHTML = `<div class="in">${m.url ? `<img src="${m.url}" alt="Your meal" style="width:100%;max-height:220px;object-fit:cover;border-radius:18px">` : ''}
+   ${busy ? `<div style="text-align:center;padding:26px 0"><div class="lbl">${m.step === 'saving' ? 'Saving' : m.b64 && !m.items.length ? 'Looking at your meal' : 'Working out the macros'}</div><p class="note">One second.</p></div>` : `
+   ${m.err ? `<p class="note" style="color:var(--acc2);margin:12px 0 0">${esc(m.err)}</p>` : ''}
+   <input type="text" data-mxf="name" value="${esc(m.name)}" maxlength="80" placeholder="Name this meal" style="margin-top:14px;font-size:20px;font-weight:700">
+   <div class="lbl" style="margin-top:16px">${m.items.length ? "I'm seeing" : m.b64 ? "Add what's on the plate" : 'What is in it'}</div>
+   ${m.items.map((i, k) => `<div class="row" style="padding:9px 0;border-top:1px solid var(--line);gap:10px"><span style="flex:1;font-size:16px">${esc((i.qty ? i.qty + ' ' : '') + i.name)}</span><button class="xbtn" data-mx="deli" data-i="${k}" aria-label="Take out">&times;</button></div>`).join('')}
+   <div class="row" style="gap:8px;margin-top:10px"><input type="text" id="mxnew" placeholder="Add something (e.g. 2 eggs)" maxlength="80"><button class="btn ghost sm" data-mx="addi">Add</button></div>
    ${m.note ? `<p class="note" style="margin:10px 0 0">${esc(m.note)}</p>` : ''}
-   <div class="lbl" style="margin-top:18px">Macros for this meal</div>
+   <div class="lbl" style="margin-top:18px">Macros</div>
    <div class="lgrid" style="grid-template-columns:1fr 1fr">${num('cal', 'Calories')}${num('pro', 'Protein (g)')}</div><div class="lgrid" style="grid-template-columns:1fr 1fr">${num('carb', 'Carbs (g)')}${num('fat', 'Fat (g)')}</div>
-   <div class="lbl" style="margin-top:16px">Which meal is this</div><select data-mxf="slot">${MSLOTS.map(x => `<option ${x === m.slot ? 'selected' : ''}>${x}</option>`).join('')}</select>
-   <label class="check" style="margin-top:14px"><input type="checkbox" data-mxf="save" ${m.save ? 'checked' : ''}> Save it so I can add it again with one tap</label>
-   <div class="row" style="gap:10px;margin-top:18px"><button class="btn" data-mx="log" style="flex:1">Log meal</button><button class="btn ghost" data-mx="cancel">Cancel</button></div>`}
+   <p class="note" style="margin:6px 0 0">${m.dirty ? 'These update when you confirm.' : 'Edit any number if it looks off.'}</p>
+   <div class="row" style="gap:10px;margin-top:16px"><button class="btn" data-mx="log" style="flex:1">Confirm and log</button><button class="btn ghost" data-mx="cancel">Cancel</button></div>
+   <div style="text-align:center;margin-top:12px"><select data-mxf="slot" style="width:auto;display:inline-block">${MSLOTS.map(x => `<option ${x === m.slot ? 'selected' : ''}>${x}</option>`).join('')}</select></div>`}
   </div>`;
   el.scrollTop = keep;
 }
@@ -700,61 +700,70 @@ async function mxAI(mode) {
     const body = mode === 'recalc' ? { mode, name: m.name, items: m.items.filter(i => i.name.trim()), image: m.b64 } : { mode, image: m.b64 };
     const { data, error } = await sb.functions.invoke('analyze-meal', { body });
     if (S.mx !== m) return;
-    if (error || !data || data.error) m.err = data && data.error === 'no_key' ? "AI isn't connected yet, so type the meal in below." : "Couldn't analyze that one. Check the details below, or try again.";
+    if (error || !data || data.error) m.err = data && data.error === 'no_key' ? "AI isn't connected yet, so type the macros in below." : "Couldn't work that out. Check the numbers below.";
     else {
       if (mode === 'identify' || !m.name.trim()) m.name = data.name;
       if (mode === 'identify') m.items = data.items;
-      m.cal = data.calories; m.pro = data.protein; m.carb = data.carbs; m.fat = data.fat; m.note = data.note || '';
+      m.cal = data.calories; m.pro = data.protein; m.carb = data.carbs; m.fat = data.fat; m.note = data.note || ''; m.dirty = false;
     }
-  } catch (e) { if (S.mx !== m) return; m.err = "Couldn't reach the analyzer. Type the details below, or try again."; }
+  } catch (e) { if (S.mx !== m) return; m.err = "Couldn't reach the analyzer. Check the numbers below."; }
   m.step = 'review'; drawMx();
 }
+function mxOpen(extra) { return S.mx = { step: 'review', slot: defSlot(), name: '', items: [], cal: 0, pro: 0, carb: 0, fat: 0, note: '', err: '', dirty: false, ...extra }; }
 async function mxStart(file) {
-  const m = S.mx = { step: 'analyzing', slot: S.mxSlot || defSlot(), name: '', items: [], cal: 0, pro: 0, carb: 0, fat: 0, note: '', err: '', save: true };
-  drawMx();
+  const m = mxOpen({ step: 'analyzing' }); drawMx();
   try { const blob = await compress(file, 1024); m.blob = blob; m.url = URL.createObjectURL(blob); m.b64 = await blobB64(blob); drawMx(); await mxAI('identify'); }
   catch (e) { if (S.mx !== m) return; m.err = "Couldn't read that photo."; m.step = 'review'; drawMx(); }
 }
 async function mxLog() {
-  const m = S.mx; if (!m) return; const name = m.name.trim(); if (!name) { toast('Give the meal a name.'); return; }
-  const u = actor().id; m.step = 'saving'; drawMx();
+  const m = S.mx; if (!m) return;
+  const addEl = $('mxnew'); if (addEl && addEl.value.trim()) { m.items.push({ name: addEl.value.trim(), qty: '' }); m.dirty = true; }
+  if (!m.name.trim() && !m.items.length) { toast('Name the meal first.'); return; }
+  if (m.dirty && m.items.some(i => i.name.trim())) { await mxAI('recalc'); if (S.mx !== m) return; }
+  const name = m.name.trim() || m.items[0].name; const u = actor().id; m.step = 'saving'; drawMx();
   try {
     let path = null;
     if (m.blob) { path = `${u}/meals/${crypto.randomUUID()}.jpg`; const up = await sb.storage.from('progress-photos').upload(path, m.blob, { contentType: 'image/jpeg' }); if (up.error) throw up.error; S.urls[path] = m.url; }
     const row = { user_id: u, name, photo_path: path, items: m.items.filter(i => i.name.trim()), calories: m.cal, protein: m.pro, carbs: m.carb, fat: m.fat };
     await must(sb.from('meal_log').insert({ ...row, day: TD, slot: m.slot }));
-    if (m.save) await must(sb.from('saved_meals').insert(row));
-    S.mx = null; drawMx(); await loadAll(); render(); toast('Meal logged.');
+    const old = (D.saved || []).find(x => x.user_id === u && x.name.toLowerCase() === name.toLowerCase());
+    if (old) await must(sb.from('saved_meals').update({ items: row.items, calories: row.calories, protein: row.protein, carbs: row.carbs, fat: row.fat, photo_path: old.photo_path || path }).eq('id', old.id));
+    else await must(sb.from('saved_meals').insert(row));
+    S.mx = null; drawMx(); await loadAll(); render(); toast(`${name} logged.`);
   } catch (e) { if (S.mx === m) { m.step = 'review'; drawMx(); } toast('Could not save: ' + (e.message || e)); }
 }
 function dropPhoto(path) {   // delete the file only when nothing else points at it
   if (!path) return; const used = [...(D.mlog || []), ...(D.saved || [])].some(r => r.photo_path === path);
   if (!used) sb.storage.from('progress-photos').remove([path]);
 }
+async function mxAddDays(r, days, slot) {
+  const u = actor().id;
+  await must(sb.from('meal_log').insert(days.map(day => ({ user_id: u, day, slot, name: r.name, photo_path: r.photo_path, items: r.items, calories: r.calories, protein: r.protein, carbs: r.carbs, fat: r.fat }))));
+  await loadAll(); render();
+}
 async function mxAction(d, t) {
-  const m = S.mx, num = v => Math.max(0, Math.round(+v || 0));
-  if (d.mxadd) { S.mxSlot = $('mslot').value; $('mph').click(); return; }
+  const m = S.mx;
+  if (d.mxadd) { $('mph').click(); return; }
+  if (d.mxtype) { mxOpen(); drawMx(); return; }
+  if (d.mxmore) { S.mopen = S.mopen === d.mxmore ? null : d.mxmore; render(); return; }
+  if (d.mxq) { const r = (D.saved || []).find(x => x.id === d.mxq); if (!r || !editable()) return; await mxAddDays(r, [TD], defSlot()); toast(`${r.name} added.`); return; }
   if (d.mxre) {
     const r = (D.saved || []).find(x => x.id === d.mxre); if (!r || !editable()) return;
-    const days = mDays($('mre-' + r.id).value), slot = $('mslot') ? $('mslot').value : defSlot(), u = actor().id;
-    await must(sb.from('meal_log').insert(days.map(day => ({ user_id: u, day, slot, name: r.name, photo_path: r.photo_path, items: r.items, calories: r.calories, protein: r.protein, carbs: r.carbs, fat: r.fat }))));
-    await loadAll(); render(); toast(days.length === 1 ? 'Added.' : `Added to ${days.length} days.`); return;
+    const days = mDays($('mre-' + r.id).value); S.mopen = null; await mxAddDays(r, days, defSlot()); toast(days.length === 1 ? 'Added.' : `Added to ${days.length} days.`); return;
   }
   if (d.mxdel) { const r = (D.mlog || []).find(x => x.id === d.mxdel); D.mlog = (D.mlog || []).filter(x => x.id !== d.mxdel); render(); const { error } = await sb.from('meal_log').delete().eq('id', d.mxdel); if (error) { toast(error.message); await loadAll(); render(); } else if (r) dropPhoto(r.photo_path); return; }
-  if (d.mxsdel) { const r = (D.saved || []).find(x => x.id === d.mxsdel); D.saved = (D.saved || []).filter(x => x.id !== d.mxsdel); render(); const { error } = await sb.from('saved_meals').delete().eq('id', d.mxsdel); if (error) { toast(error.message); await loadAll(); render(); } else if (r) dropPhoto(r.photo_path); return; }
-  if (d.mxsave) { const r = (D.mlog || []).find(x => x.id === d.mxsave); if (!r) return; await must(sb.from('saved_meals').insert({ user_id: r.user_id, name: r.name, photo_path: r.photo_path, items: r.items, calories: r.calories, protein: r.protein, carbs: r.carbs, fat: r.fat })); await loadAll(); render(); toast('Saved. Find it under Saved meals.'); return; }
+  if (d.mxsdel) { if (!confirm('Delete this saved meal? Your past logs stay.')) return; const r = (D.saved || []).find(x => x.id === d.mxsdel); D.saved = (D.saved || []).filter(x => x.id !== d.mxsdel); S.mopen = null; render(); const { error } = await sb.from('saved_meals').delete().eq('id', d.mxsdel); if (error) { toast(error.message); await loadAll(); render(); } else if (r) dropPhoto(r.photo_path); return; }
   if (!m) return;
-  if (d.mx === 'cancel') { const p = m.url; S.mx = null; drawMx(); return; }
-  if (d.mx === 'addi') { m.items.push({ name: '', qty: '' }); drawMx(); return; }
-  if (d.mx === 'deli') { m.items.splice(+d.i, 1); drawMx(); return; }
-  if (d.mx === 'recalc') { if (!m.items.some(i => i.name.trim())) { toast('Add at least one ingredient first.'); return; } return mxAI('recalc'); }
+  if (d.mx === 'cancel') { S.mx = null; drawMx(); return; }
+  if (d.mx === 'addi') { const el = $('mxnew'), v = el ? el.value.trim() : ''; if (!v) return; m.items.push({ name: v, qty: '' }); m.dirty = true; drawMx(); const n = $('mxnew'); if (n) n.focus(); return; }
+  if (d.mx === 'deli') { m.items.splice(+d.i, 1); m.dirty = true; drawMx(); return; }
   if (d.mx === 'log') return mxLog();
 }
 document.addEventListener('input', e => {
   const t = e.target, m = S.mx; if (!m) return;
-  if (t.dataset.mxf) { const k = t.dataset.mxf; if (k === 'save') m.save = t.checked; else if (k === 'name' || k === 'slot') m[k] = t.value; else m[k] = Math.max(0, Math.round(+t.value || 0)); }
-  else if (t.dataset.mxi) { const [i, f] = t.dataset.mxi.split('|'); if (m.items[+i]) m.items[+i][f] = t.value; }
+  if (t.dataset.mxf) { const k = t.dataset.mxf; if (k === 'name' || k === 'slot') m[k] = t.value; else m[k] = Math.max(0, Math.round(+t.value || 0)); }
 });
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'mxnew') { e.preventDefault(); mxAction({ mx: 'addi' }, e.target); } });
 function jugsFor(p) { return p.water_style === 'teacup' ? [40, 40, 40] : [40, 40, 40, 8]; }
 // Same wording the server sends. Keep in sync with MESSAGES in supabase/functions/water-reminders/index.ts.
 const REMINDER_MSG = { taylor: "Go fill er' up! You're at {oz} of 128oz.", daddy: "Drink up pussy! You're only at {oz} of 128oz.", tyler: "Drink up pussy! You're only at {oz} of 128oz." };
@@ -1099,7 +1108,7 @@ document.addEventListener('click', async e => {
   if (t.id === 'pushTest') { try { const reg = await navigator.serviceWorker.ready; await reg.showNotification('Water Reminder', { body: reminderText(S.me, dailyRow(S.me.id, TD).water_oz), icon: 'icon-180.png' }); } catch (e) { toast('Could not show it: ' + e.message); } return; }
   if (t.id === 'atoggle') { S.authMode = S.authMode === 'up' ? 'in' : 'up'; render(); return; }
   if (!S.me) return;
-  if (d.mx || d.mxadd || d.mxre || d.mxdel || d.mxsdel || d.mxsave) { await mxAction(d, t); return; }
+  if (d.mx || d.mxadd || d.mxtype || d.mxmore || d.mxq || d.mxre || d.mxdel || d.mxsdel) { await mxAction(d, t); return; }
   if (d.funadd) { $('fph').click(); return; }
   if (d.fundel) {
     if (!confirm('Delete this photo for good?')) return;
