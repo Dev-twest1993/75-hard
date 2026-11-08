@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-07c">
+<meta name="app-version" content="2026-11-07d">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -101,11 +101,17 @@ svg[role=img]{display:block;width:100%;max-width:100%;height:auto}
 .fungrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
 .fthumb{aspect-ratio:1;border-radius:14px;background:rgba(255,255,255,.04) center/cover;border:1px solid var(--line);cursor:pointer}
 /* Workout page buttons: gunmetal with a colored underline */
+[data-tile=cal] .btn,
 body[data-tab=workouts] .btn{background:#18201c;color:#eaf2ee;border:1px solid #26302b;border-bottom:2px solid #30d158;border-radius:14px;box-shadow:none;text-shadow:none;font-weight:600}
+[data-tile=cal] .btn.amber,
 body[data-tab=workouts] .btn.amber{border-bottom-color:#ffd60a}
+[data-tile=cal] .btn.blue,
 body[data-tab=workouts] .btn.blue{border-bottom-color:#0a84ff}
+[data-tile=cal] .btn.red,
 body[data-tab=workouts] .btn.red{border-bottom-color:#ff453a}
+[data-tile=cal] .btn.violet,
 body[data-tab=workouts] .btn.violet{border-bottom-color:#bf5af2}
+[data-tile=cal] .btn.ghost,
 body[data-tab=workouts] .btn.ghost{background:transparent;color:var(--dim);border:1px solid var(--line);box-shadow:none}
 @media (max-width:767px){
   .split>*{min-width:0}
@@ -232,6 +238,6 @@ textarea{background:rgba(0,0,0,.35);border:1px solid var(--line);color:var(--tex
 <div class="banner" id="banner"></div>
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="app.js?v=2026-11-07c"></script>
+<script src="app.js?v=2026-11-07d"></script>
 </body>
 </html>

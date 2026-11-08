@@ -323,9 +323,9 @@ function detSummary(d) {
 }
 function calTile(v) {
   const fin = ringsDone(v.id, TD);
-  if (S.calTD !== TD || (fin && S.calFin !== TD)) { S.calTD = TD; S.calFin = fin ? TD : null; S.calSel = fin ? addDays(TD, 1) : TD; S.calMonth = S.calSel.slice(0, 7); }
+  if (S.calTD !== TD || (fin && S.calFin !== TD)) { S.calTD = TD; S.calFin = fin ? TD : null; S.calSel = fin ? addDays(TD, 1) : TD; S.calMonth = S.calSel.slice(0, 7); S.calWk = S.calSel; }
   if (!fin) S.calFin = null;
-  const view = S.calView || 'day';
+  const view = S.calView || 'week';
   const sel = S.calSel, ed = editable() && canEdit(v.id), saved = planOf(v.id, sel), editing = ed && (S.calEditing === sel || !saved.length);
   if (S.calDraftDay !== sel || !editing) { S.calDraftDay = sel; if (!editing) S.calDraft = saved.slice(); else if (S.calDraftFor !== sel) S.calDraft = saved.slice(); }
   S.calDraftFor = editing ? sel : null;
@@ -881,10 +881,10 @@ function chart(p) {
    ${pts.map((q, i) => `<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="#30d158" stroke="#060c09" stroke-width="2"/><text x="${q[0]}" y="${q[1] - 9}" fill="#eaf4ee" font-size="10" text-anchor="middle">${+ws[i].weight}</text>`).join('')}</svg>`;
 }
 const PROG_IDS = ['numbers', 'days', 'fun'];
-function funTile() {
+function funTile(view) {
   const list = D.fun || [], who = id => (D.profiles.find(p => p.id === id) || {}).name || '';
   const cells = list.map(f => { const u = S.urls[f.path]; return `<div class="fthumb" ${u ? `data-pv="${esc(f.path)}" data-fid="${f.id}" data-cap="${esc(who(f.user_id))} &middot; ${pretty(f.taken_on)}" style="background-image:url('${u}')"` : ''}></div>`; }).join('');
-  return `<div class="card dtile" data-tile="fun">${GRIP}<div class="lbl" style="padding-right:44px">Fun Photos</div><p class="note" style="margin:6px 0 12px">${list.length ? list.length + ' memor' + (list.length === 1 ? 'y' : 'ies') + ' from the journey.' : 'Add photos of the good moments along the way.'}</p><button class="btn sm ctl" data-funadd="1">Add photos</button>${list.length ? `<div class="fungrid">${cells}</div>` : ''}</div>`;
+  return `<div class="card${view ? '' : ' dtile'}" data-tile="fun">${view ? '' : GRIP}<div class="lbl" style="padding-right:44px">Fun Photos</div><p class="note" style="margin:6px 0 12px">${list.length ? list.length + ' memor' + (list.length === 1 ? 'y' : 'ies') + ' from the journey.' : view ? 'No fun photos yet. Add some from your Progress page.' : 'Add photos of the good moments along the way.'}</p>${view ? '' : '<button class="btn sm ctl" data-funadd="1">Add photos</button>'}${list.length ? `<div class="fungrid">${cells}</div>` : ''}</div>`;
 }
 function progOrder() {
   try { let o = JSON.parse(localStorage.getItem('progOrder')); if (Array.isArray(o)) { o = o.filter(k => PROG_IDS.includes(k)); for (const k of PROG_IDS) if (!o.includes(k)) o.push(k); return o; } } catch (_) { }
@@ -963,7 +963,7 @@ function splitProgress() {
     const tile = (l, v, hi) => `<div class="tile${hi ? ' hi' : ''}" style="padding:10px;margin-bottom:8px"><span class="lbl">${l}</span><b style="font-size:22px;margin-top:4px">${v}</b></div>`;
     return tile('Starting', `${st ?? '--'} <small>lb</small>`) + tile('Current', `${cu ?? '--'} <small>lb</small>`) + tile('Change', `${diff === null ? '--' : (diff > 0 ? '+' : '') + diff} <small>lb</small>`, true)
       + `<div class="lbl" style="margin:10px 0 6px">Today's photo</div>` + (url ? `<div class="thumb" style="height:120px;border-radius:14px;background-image:url('${url}')"></div>` : `<span class="badge">${ph ? 'Done' : 'Not yet'}</span>`);
-  });
+  }) + funTile(true);
 }
 
 function vAuth() {
