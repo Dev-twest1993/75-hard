@@ -656,9 +656,9 @@ function vMeals() {
   const today = (D.mlog || []).filter(r => mine(r) && r.day === TD), soon = (D.mlog || []).filter(r => mine(r) && r.day > TD).sort((a, b) => a.day < b.day ? -1 : 1);
   const saved = (D.saved || []).filter(mine).map(r => ({ r, n: mUses(p.id, r.name) })).sort((a, b) => b.n - a.n).map(x => x.r), t = mTot(today);
   const tile = (v, l) => `<div class="mt"><b>${v}</b><span>${l}</span></div>`;
-  const row = r => `<div class="mrow">${mThumb(r)}<div class="mi"><b>${esc(r.name)}</b> <span class="badge">${esc(r.slot)}</span><div class="note" style="margin:3px 0 0">${mLine(r)}</div></div>${ed ? `<button class="xbtn" data-mxdel="${r.id}" aria-label="Remove meal">&times;</button>` : ''}</div>`;
+  const row = r => `<div class="mrow">${mThumb(r)}<div class="mi"><b>${esc(r.name)}</b> <span class="badge">${esc(r.slot)}</span><div class="note" style="margin:3px 0 0">${mLine(r)}</div>${ed ? `<button class="link" data-mxedit="meal_log:${r.id}" style="margin-top:4px">Edit</button>` : ''}</div>${ed ? `<button class="xbtn" data-mxdel="${r.id}" aria-label="Remove meal">&times;</button>` : ''}</div>`;
   const add = ed ? `<button class="btn ctl" data-mxadd="1" style="width:100%;margin-top:14px">Add a meal photo</button><div style="text-align:center;margin-top:8px"><button class="link" data-mxtype="1">or type it in</button></div>` : '';
-  const favs = saved.length ? saved.map(r => `<div class="mrow" style="align-items:center">${mThumb(r)}<div class="mi"><b>${esc(r.name)}</b><div class="note" style="margin:3px 0 0">${mLine(r)}</div>${S.mopen === r.id && ed ? `<div class="row" style="gap:8px;margin-top:8px"><select id="mre-${r.id}" style="flex:1"><option value="tomorrow">Tomorrow</option><option value="week">Rest of the week</option></select><button class="btn ghost sm ctl" data-mxre="${r.id}">Add</button><button class="btn ghost sm ctl" data-mxsdel="${r.id}">Delete</button></div>` : ''}</div>${ed ? `<button class="btn sm ctl" data-mxq="${r.id}" aria-label="Add ${esc(r.name)} to today">+ Add</button><button class="xbtn" data-mxmore="${r.id}" aria-label="More options">&#8943;</button>` : ''}</div>`).join('') : '<p class="note" style="margin:8px 0 0">Every meal you log is remembered here. Your most common ones rise to the top.</p>';
+  const favs = saved.length ? saved.map(r => `<div class="mrow" style="align-items:center">${mThumb(r)}<div class="mi"><b>${esc(r.name)}</b><div class="note" style="margin:3px 0 0">${mLine(r)}</div>${S.mopen === r.id && ed ? `<div class="row" style="gap:8px;margin-top:8px"><select id="mre-${r.id}" style="flex:1"><option value="tomorrow">Tomorrow</option><option value="week">Rest of the week</option></select><button class="btn ghost sm ctl" data-mxre="${r.id}">Add</button></div><div class="row" style="gap:8px;margin-top:8px"><button class="btn ghost sm ctl" data-mxedit="saved_meals:${r.id}">Edit</button><button class="btn ghost sm ctl" data-mxsdel="${r.id}">Delete</button></div>` : ''}</div>${ed ? `<button class="btn sm ctl" data-mxq="${r.id}" aria-label="Add ${esc(r.name)} to today">+ Add</button><button class="xbtn" data-mxmore="${r.id}" aria-label="More options">&#8943;</button>` : ''}</div>`).join('') : '<p class="note" style="margin:8px 0 0">Every meal you log is remembered here. Your most common ones rise to the top.</p>';
   const rowsT = DAYN.map((d, i) => `<tr><td>${d}</td>${SLOTS.map(s => `<td contenteditable="true" class="ctl" data-meal="${i}|${s}">${esc(D.meals[i + '|' + s] || '')}</td>`).join('')}</tr>`).join('');
   return header('<em>Meals</em>') + `<div style="height:14px"></div>
    <div class="card"><div class="lbl" style="margin-bottom:10px">${p.id === S.me.id ? 'Today' : esc(p.name) + ' today'}</div>
@@ -682,25 +682,26 @@ function drawMx() {
    ${busy ? `<div style="text-align:center;padding:26px 0"><div class="lbl">${m.step === 'saving' ? 'Saving' : m.b64 && !m.items.length ? 'Looking at your meal' : 'Working out the macros'}</div><p class="note">One second.</p></div>` : `
    ${m.err ? `<p class="note" style="color:var(--acc2);margin:12px 0 0">${esc(m.err)}</p>` : ''}
    <input type="text" data-mxf="name" value="${esc(m.name)}" maxlength="80" placeholder="Name this meal" style="margin-top:14px;font-size:20px;font-weight:700">
-   <div class="lbl" style="margin-top:16px">${m.items.length ? "I'm seeing" : m.b64 ? "Add what's on the plate" : 'What is in it'}</div>
+   <div class="lbl" style="margin-top:16px">${m.edit ? 'Ingredients' : m.items.length ? "I'm seeing" : m.b64 ? "Add what's on the plate" : 'What is in it'}</div>
    ${m.items.map((i, k) => `<div class="row" style="padding:9px 0;border-top:1px solid var(--line);gap:10px"><span style="flex:1;font-size:16px">${esc((i.qty ? i.qty + ' ' : '') + i.name)}</span><button class="xbtn" data-mx="deli" data-i="${k}" aria-label="Take out">&times;</button></div>`).join('')}
    <div class="row" style="gap:8px;margin-top:10px"><input type="text" id="mxnew" placeholder="Add something (e.g. 2 eggs)" maxlength="80"><button class="btn ghost sm" data-mx="addi">Add</button></div>
    ${m.note ? `<p class="note" style="margin:10px 0 0">${esc(m.note)}</p>` : ''}
    <div class="lbl" style="margin-top:18px">Macros</div>
    <div class="lgrid" style="grid-template-columns:1fr 1fr">${num('cal', 'Calories')}${num('pro', 'Protein (g)')}</div><div class="lgrid" style="grid-template-columns:1fr 1fr">${num('carb', 'Carbs (g)')}${num('fat', 'Fat (g)')}</div>
-   <p class="note" style="margin:6px 0 0">${m.dirty ? 'These update when you confirm.' : 'Edit any number if it looks off.'}</p>
-   <div class="row" style="gap:10px;margin-top:16px"><button class="btn" data-mx="log" style="flex:1">Confirm and log</button><button class="btn ghost" data-mx="cancel">Cancel</button></div>
-   <div style="text-align:center;margin-top:12px"><select data-mxf="slot" style="width:auto;display:inline-block">${MSLOTS.map(x => `<option ${x === m.slot ? 'selected' : ''}>${x}</option>`).join('')}</select></div>`}
+   <p class="note" id="mxst" style="margin:6px 0 0">${m.dirty || m.calcing ? 'Updating macros...' : esc(m.calcErr || 'Edit any number if it looks off.')}</p>
+   <div class="row" style="gap:10px;margin-top:16px"><button class="btn" data-mx="log" style="flex:1">${m.edit ? 'Save changes' : 'Confirm and log'}</button><button class="btn ghost" data-mx="cancel">Cancel</button></div>
+   ${m.edit && m.edit.table === 'saved_meals' ? '' : `<div style="text-align:center;margin-top:12px"><select data-mxf="slot" style="width:auto;display:inline-block">${MSLOTS.map(x => `<option ${x === m.slot ? 'selected' : ''}>${x}</option>`).join('')}</select></div>`}`}
   </div>`;
   el.scrollTop = keep;
 }
 async function mxAI(mode) {
   const m = S.mx; if (!m) return; m.step = 'analyzing'; m.err = ''; drawMx();
   try {
-    const body = mode === 'recalc' ? { mode, name: m.name, items: m.items.filter(i => i.name.trim()), image: m.b64 } : { mode, image: m.b64 };
+    const body = mode === 'recalc' ? { mode, name: m.name, items: m.items.filter(i => i.name.trim()) } : { mode, image: m.b64 };
     const { data, error } = await sb.functions.invoke('analyze-meal', { body });
     if (S.mx !== m) return;
-    if (error || !data || data.error) m.err = data && data.error === 'no_key' ? "AI isn't connected yet, so type the macros in below." : "Couldn't work that out. Check the numbers below.";
+    const why = { no_key: "AI isn't connected yet, so type the macros in below.", bad_key: "The AI key was rejected. Check the numbers below.", rate_limited: "The free AI is busy right now. Wait a minute and try again, or type the macros in below.", daily_limit: "That is the daily AI limit. Type the macros in below, and it resets tomorrow." };
+    if (error || !data || data.error) m.err = (data && why[data.error]) || "Couldn't work that out. Check the numbers below.";
     else {
       if (mode === 'identify' || !m.name.trim()) m.name = data.name;
       if (mode === 'identify') m.items = data.items;
@@ -709,17 +710,52 @@ async function mxAI(mode) {
   } catch (e) { if (S.mx !== m) return; m.err = "Couldn't reach the analyzer. Check the numbers below."; }
   m.step = 'review'; drawMx();
 }
+// Re-work the macros from the current ingredient list, quietly, a moment after the last change.
+function mxSoon() { const m = S.mx; if (!m) return; m.dirty = true; clearTimeout(mxSoon.t); mxStatus(); mxSoon.t = setTimeout(mxCalc, 900); }
+function mxStatus() { const el = $('mxst'), m = S.mx; if (el && m) el.textContent = m.calcing ? 'Updating macros...' : m.dirty ? 'Updating macros...' : (m.calcErr || 'Edit any number if it looks off.'); }
+async function mxCalc() {
+  const m = S.mx; if (!m) return;
+  const list = m.items.filter(i => i.name.trim()); if (!list.length) { m.dirty = false; mxStatus(); return; }
+  const sig = sj(list) + '|' + m.name; m.calcing = sig; m.calcErr = ''; mxStatus();
+  try {
+    const { data, error } = await sb.functions.invoke('analyze-meal', { body: { mode: 'recalc', name: m.name, items: list } });
+    if (S.mx !== m || m.calcing !== sig) return;   // the list changed again, a newer calculation is on its way
+    if (error || !data || data.error) m.calcErr = data && data.error === 'daily_limit' ? 'Daily AI limit reached. Edit the numbers by hand.' : "Couldn't update the macros. Edit the numbers by hand.";
+    else { m.cal = data.calories; m.pro = data.protein; m.carb = data.carbs; m.fat = data.fat; m.note = data.note || ''; m.dirty = false; for (const [k, v] of [['cal', m.cal], ['pro', m.pro], ['carb', m.carb], ['fat', m.fat]]) { const i = document.querySelector(`#mx [data-mxf=${k}]`); if (i) i.value = v; } }
+  } catch (e) { if (S.mx === m && m.calcing === sig) m.calcErr = "Couldn't update the macros. Edit the numbers by hand."; }
+  if (S.mx === m && m.calcing === sig) m.calcing = false;
+  mxStatus();
+}
 function mxOpen(extra) { return S.mx = { step: 'review', slot: defSlot(), name: '', items: [], cal: 0, pro: 0, carb: 0, fat: 0, note: '', err: '', dirty: false, ...extra }; }
 async function mxStart(file) {
   const m = mxOpen({ step: 'analyzing' }); drawMx();
   try { const blob = await compress(file, 1024); m.blob = blob; m.url = URL.createObjectURL(blob); m.b64 = await blobB64(blob); drawMx(); await mxAI('identify'); }
   catch (e) { if (S.mx !== m) return; m.err = "Couldn't read that photo."; m.step = 'review'; drawMx(); }
 }
+function mxEdit(table, id) {
+  const r = (table === 'meal_log' ? D.mlog : D.saved || []).find(x => x.id === id); if (!r) return;
+  mxOpen({ edit: { table, id }, name: r.name, items: (r.items || []).map(i => ({ name: i.name, qty: i.qty || '' })), cal: r.calories, pro: r.protein, carb: r.carbs, fat: r.fat, slot: r.slot || defSlot(), url: r.photo_path ? S.urls[r.photo_path] || null : null });
+  drawMx();
+}
+async function mxSaveEdit() {
+  const m = S.mx; if (!m || !m.edit) return;
+  const addEl = $('mxnew'); if (addEl && addEl.value.trim()) { m.items.push({ name: addEl.value.trim(), qty: '' }); m.dirty = true; }
+  clearTimeout(mxSoon.t);
+  if (m.dirty && m.items.some(i => i.name.trim())) { m.step = 'saving'; drawMx(); await mxCalc(); if (S.mx !== m) return; }
+  const name = m.name.trim() || (m.items[0] && m.items[0].name); if (!name) { m.step = 'review'; drawMx(); toast('Name the meal first.'); return; }
+  m.step = 'saving'; drawMx();
+  const patch = { name, items: m.items.filter(i => i.name.trim()), calories: m.cal, protein: m.pro, carbs: m.carb, fat: m.fat };
+  if (m.edit.table === 'meal_log') patch.slot = m.slot;
+  try { await must(sb.from(m.edit.table).update(patch).eq('id', m.edit.id)); S.mx = null; drawMx(); await loadAll(); render(); toast('Saved.'); }
+  catch (e) { if (S.mx === m) { m.step = 'review'; drawMx(); } }
+}
 async function mxLog() {
   const m = S.mx; if (!m) return;
+  if (m.edit) return mxSaveEdit();
   const addEl = $('mxnew'); if (addEl && addEl.value.trim()) { m.items.push({ name: addEl.value.trim(), qty: '' }); m.dirty = true; }
   if (!m.name.trim() && !m.items.length) { toast('Name the meal first.'); return; }
-  if (m.dirty && m.items.some(i => i.name.trim())) { await mxAI('recalc'); if (S.mx !== m) return; }
+  clearTimeout(mxSoon.t);
+  if (m.dirty && m.items.some(i => i.name.trim())) { m.step = 'saving'; drawMx(); await mxCalc(); if (S.mx !== m) return; }
   const name = m.name.trim() || m.items[0].name; const u = actor().id; m.step = 'saving'; drawMx();
   try {
     let path = null;
@@ -744,6 +780,7 @@ async function mxAddDays(r, days, slot) {
 async function mxAction(d, t) {
   const m = S.mx;
   if (d.mxadd) { $('mph').click(); return; }
+  if (d.mxedit) { const [tb, id] = d.mxedit.split(':'); if (editable()) mxEdit(tb, id); return; }
   if (d.mxtype) { mxOpen(); drawMx(); return; }
   if (d.mxmore) { S.mopen = S.mopen === d.mxmore ? null : d.mxmore; render(); return; }
   if (d.mxq) { const r = (D.saved || []).find(x => x.id === d.mxq); if (!r || !editable()) return; await mxAddDays(r, [TD], defSlot()); toast(`${r.name} added.`); return; }
@@ -755,8 +792,8 @@ async function mxAction(d, t) {
   if (d.mxsdel) { if (!confirm('Delete this saved meal? Your past logs stay.')) return; const r = (D.saved || []).find(x => x.id === d.mxsdel); D.saved = (D.saved || []).filter(x => x.id !== d.mxsdel); S.mopen = null; render(); const { error } = await sb.from('saved_meals').delete().eq('id', d.mxsdel); if (error) { toast(error.message); await loadAll(); render(); } else if (r) dropPhoto(r.photo_path); return; }
   if (!m) return;
   if (d.mx === 'cancel') { S.mx = null; drawMx(); return; }
-  if (d.mx === 'addi') { const el = $('mxnew'), v = el ? el.value.trim() : ''; if (!v) return; m.items.push({ name: v, qty: '' }); m.dirty = true; drawMx(); const n = $('mxnew'); if (n) n.focus(); return; }
-  if (d.mx === 'deli') { m.items.splice(+d.i, 1); m.dirty = true; drawMx(); return; }
+  if (d.mx === 'addi') { const el = $('mxnew'), v = el ? el.value.trim() : ''; if (!v) return; m.items.push({ name: v, qty: '' }); drawMx(); mxSoon(); const n = $('mxnew'); if (n) n.focus(); return; }
+  if (d.mx === 'deli') { m.items.splice(+d.i, 1); drawMx(); mxSoon(); return; }
   if (d.mx === 'log') return mxLog();
 }
 document.addEventListener('input', e => {
@@ -1108,7 +1145,7 @@ document.addEventListener('click', async e => {
   if (t.id === 'pushTest') { try { const reg = await navigator.serviceWorker.ready; await reg.showNotification('Water Reminder', { body: reminderText(S.me, dailyRow(S.me.id, TD).water_oz), icon: 'icon-180.png' }); } catch (e) { toast('Could not show it: ' + e.message); } return; }
   if (t.id === 'atoggle') { S.authMode = S.authMode === 'up' ? 'in' : 'up'; render(); return; }
   if (!S.me) return;
-  if (d.mx || d.mxadd || d.mxtype || d.mxmore || d.mxq || d.mxre || d.mxdel || d.mxsdel) { await mxAction(d, t); return; }
+  if (d.mx || d.mxadd || d.mxedit || d.mxtype || d.mxmore || d.mxq || d.mxre || d.mxdel || d.mxsdel) { await mxAction(d, t); return; }
   if (d.funadd) { $('fph').click(); return; }
   if (d.fundel) {
     if (!confirm('Delete this photo for good?')) return;
