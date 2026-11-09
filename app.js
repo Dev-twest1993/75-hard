@@ -235,9 +235,9 @@ function header(title) {
 }
 function dayCounter(p) {
   const n = dayNum(p);
-  if (n < 1) return { left: 75, sub: 'days left', note: `Day 1 starts ${pretty(p.start_date)}`, frac: 0 };
-  if (n > 75) return { left: 0, sub: 'complete', note: '', frac: 1 };
-  return { left: 75 - n + 1, sub: 'days left', note: '', frac: (n - 1) / 75 + .013 };
+  if (n < 1) return { left: 75, sub: 'days left', note: `Day 1 starts ${pretty(p.start_date)}`, frac: 0, day: '' };
+  if (n > 75) return { left: 0, sub: 'complete', note: '', frac: 1, day: 'Day 75 of 75' };
+  return { left: 75 - n + 1, sub: 'days left', note: '', frac: (n - 1) / 75 + .013, day: `Day ${n} of 75` };
 }
 function testBar(p) { return dayNum(p) < 1 ? `<div class="roBar" style="color:var(--acc2)">Practice mode until ${pretty(p.start_date)}. Log whatever you like to try things out. None of it counts toward your 75 days.</div>` : ''; }
 
@@ -291,7 +291,7 @@ function vToday() {
     const col = p => { const done = complete(p.id, TD);
       return `<div class="p"><h3>${esc(p.name)}</h3>${allRings(p.id, { size: RS, stroke: RS < 150 ? 9 : 11, step: RS < 150 ? 11 : 14 })}
       <div style="margin-top:10px"><span class="badge ${done ? 'good' : ''}">${done ? 'Day complete' : 'In progress'}</span></div></div>`; };
-    return header('Today') + `<div class="card" style="text-align:center${WIDE() ? '' : ';padding:12px'}"><div class="big">${ring(WIDE() ? 200 : 140, WIDE() ? 12 : 10, c.frac, '#00e676', `<span class="days" style="font-size:${WIDE() ? 64 : 44}px">${c.left}</span><span class="dayslbl">${c.sub}</span>`)}</div></div><div class="split">${col(S.me)}${col(pr)}</div>
+    return header('Today') + `<div class="card" style="text-align:center${WIDE() ? '' : ';padding:12px'}"><div class="big">${ring(WIDE() ? 200 : 140, WIDE() ? 12 : 10, c.frac, '#00e676', `<span class="days" style="font-size:${WIDE() ? 64 : 44}px">${c.left}</span><span class="dayslbl">${c.sub}</span>${c.day ? `<span class="dayslbl" style="color:var(--acc);font-weight:700">${c.day}</span>` : ''}`)}</div></div><div class="split">${col(S.me)}${col(pr)}</div>${cal75([S.me, pr])}
       <p class="note" style="margin-top:12px">Live view. When ${esc(pr.name)} checks something off, it shows up here.</p>`;
   }
   const f = rings(v.id, TD), c = dayCounter(v);
@@ -302,7 +302,7 @@ function vToday() {
   if (!pr) other = `<div class="card"><div class="lbl">Waiting for your partner</div><p class="note" style="margin:8px 0 0">Once they create their account, their rings show up here live.</p></div>`;
   return header('Good <em>' + greet() + '</em>') + testBar(v) +
     `<div id="tiles" data-dragbox="today">${tileOrder().map(k => k === 'days'
-      ? `<div class="card dtile" data-tile="days">${GRIP}<div class="big">${ring(280, 13, c.frac, '#00e676', `<span class="days">${c.left}</span><span class="dayslbl">${c.sub}</span>`)}</div>${c.note ? `<p class="note" style="text-align:center;margin:0">${c.note}</p>` : ''}</div>`
+      ? `<div class="card dtile" data-tile="days">${GRIP}<div class="big">${ring(280, 13, c.frac, '#00e676', `<span class="days">${c.left}</span><span class="dayslbl">${c.sub}</span>${c.day ? `<span class="dayslbl" style="color:var(--acc);font-weight:700">${c.day}</span>` : ''}`)}</div>${c.note ? `<p class="note" style="text-align:center;margin:0">${c.note}</p>` : ''}</div>`
       : k === 'all'
         ? `<div class="card dtile" data-tile="all">${GRIP}${allRings(v.id)}</div>`
         : k === 'cal' ? calTile(v)
@@ -311,6 +311,21 @@ function vToday() {
         : `<div class="card dtile" data-tile="single">${GRIP}<div class="lbl" style="margin-bottom:14px">Today's rings</div><div class="rings">${small}</div></div>`).join('')}</div>
     <div style="height:14px"></div>${other}
     <div style="text-align:center;margin-top:8px"><button class="link" id="signout">Sign out</button></div>`;
+}
+
+// ---------- 75-day ring calendar (split Today) ----------
+function miniRings(u, d, future) {
+  const f = future ? null : rings(u, d), keys = Object.keys(NAMES), S0 = 34, st = 2.6, gap = 3.1;
+  const arcs = keys.map((k, i) => { const r = (S0 - st) / 2 - i * gap, c = 2 * Math.PI * r, fr = f ? Math.min(f[k], 1) : 0;
+    return `<circle cx="17" cy="17" r="${r}" fill="none" stroke="${RCOL[k]}" stroke-opacity=".18" stroke-width="${st}"/>` + (fr > .001 ? `<circle cx="17" cy="17" r="${r}" fill="none" stroke="${RCOL[k]}" stroke-width="${st}" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - fr)}"/>` : ''); }).join('');
+  return `<svg width="34" height="34" viewBox="0 0 34 34" style="transform:rotate(-90deg)">${arcs}</svg>`;
+}
+function cal75(people) {
+  const grid = p => { let cells = '';
+    for (let i = 0; i < 75; i++) { const d = addDays(p.start_date, i), future = d > TD, today = d === TD;
+      cells += `<div class="c75${today ? ' now' : ''}${future ? ' fut' : ''}">${miniRings(p.id, d, future)}<span>${i + 1}</span></div>`; }
+    return `<div class="lbl" style="margin:12px 0 6px">${esc(p.name)}</div><div class="g75">${cells}</div>`; };
+  return `<div class="card" style="margin-top:12px"><div class="lbl">75-Day Calendar</div><p class="note" style="margin:4px 0 0">Every day shows the rings that were closed. Today fills in as you go.</p>${people.map(grid).join('')}</div>`;
 }
 
 // ---------- calendar tile ----------
@@ -484,7 +499,8 @@ const lSave = () => {
 };
 function lKeys() {   // every planned lift as 'muscle|name', in the user's own drag order
   const flat = []; for (const m of lsel()) for (const n of (lplan()[m] || [])) flat.push(m + '|' + n);
-  const ord = S.lorder || []; return [...ord.filter(k => flat.includes(k)), ...flat.filter(k => !ord.includes(k))];
+  const ord = S.lorder || [], all = [...ord.filter(k => flat.includes(k)), ...flat.filter(k => !ord.includes(k))], dn = S.ldone || {};
+  return [...all.filter(k => dn[k]), ...all.filter(k => !dn[k])];   // finished lifts sit on top so what is left is easy to see
 }
 const lsel = () => { if (CTX) return S.cd.sel; lInit(); return S.lsel; };
 const lplan = () => { if (CTX) return S.cd.plan; lInit(); return S.plan; };
@@ -880,8 +896,12 @@ const isTaylor = p => /^taylor$/i.test(String(p && p.name).trim());
 const exOz = r => (r.amino ? 8 : 0) + (r.coffee_n || 0) * 6 + (r.protein_n || 0) * 12;   // ounces from amino, coffee and protein water
 function extrasCard(p, dr) {
   const ed = editable() && canEdit(p.id), row = (k, name, oz, n) => `<div class="xtra"><div class="xl"><b>${name}</b><span>${oz} oz each &middot; ${n * oz} oz so far</span></div>${ed ? `<button class="btn ghost sm ctl" data-xtra="${k}" data-dx="-1" aria-label="Remove one ${name}">-</button>` : ''}<span class="xn">${n}</span>${ed ? `<button class="btn sm ctl" data-xtra="${k}" data-dx="1" aria-label="Add one ${name}">+</button>` : ''}</div>`;
-  return `<div class="card"><div class="lbl" style="margin-bottom:4px">Also counts toward your 128</div>${row('coffee_n', 'Coffee', 6, dr.coffee_n || 0)}${row('protein_n', 'Protein water', 12, dr.protein_n || 0)}</div>`;
+  return `<div class="card"><div class="lbl" style="margin-bottom:4px">Also counts toward your 128</div>${row('coffee_n', 'Coffee', 6, dr.coffee_n || 0)}</div>`;
 }
+const PILLCOL = '#bf5af2';
+const aminoSvg = (f, anim) => `<svg width="48" height="96" viewBox="0 0 56 96"><path d="M10 14h36l-5 76q-.5 4-5 4H20q-4.5 0-5-4z" fill="none" stroke="${WATERBLUE}" stroke-width="2.5"/>${anim ? `<path class="liquid" d="M10 14h36l-5 76q-.5 4-5 4H20q-4.5 0-5-4z" fill="${WATERBLUE}" fill-opacity=".85"/>` : ''}<path d="M10 14h36l-5 76q-.5 4-5 4H20q-4.5 0-5-4z" fill="${f && !anim ? WATERBLUE : 'transparent'}" fill-opacity=".85" stroke="${WATERBLUE}" stroke-width="2.5" style="filter:drop-shadow(0 0 ${f ? 9 : 2}px ${WATERBLUE})"/><text x="28" y="62" text-anchor="middle" font-size="26" font-weight="800" fill="${f ? '#fff' : WATERBLUE}" style="font-family:inherit">A</text></svg>`;
+const proteinSvg = (f, anim) => `<svg width="48" height="96" viewBox="0 0 56 96"><rect x="21" y="2" width="14" height="9" rx="3" fill="none" stroke="${WATERBLUE}" stroke-width="2"/><path d="M24 11v5M32 11v5" stroke="${WATERBLUE}" stroke-width="2"/>${anim ? `<rect class="liquid" x="10" y="16" width="36" height="78" rx="12" fill="${WATERBLUE}" fill-opacity=".85"/>` : ''}<rect x="10" y="16" width="36" height="78" rx="12" fill="${f && !anim ? WATERBLUE : 'transparent'}" fill-opacity=".85" stroke="${WATERBLUE}" stroke-width="2.5" style="filter:drop-shadow(0 0 ${f ? 9 : 2}px ${WATERBLUE})"/><text x="28" y="62" text-anchor="middle" font-size="26" font-weight="800" fill="${f ? '#fff' : WATERBLUE}" style="font-family:inherit">P</text></svg>`;
+const pillSvg = (f, anim) => `<svg width="56" height="96" viewBox="0 0 56 96"><g transform="translate(28 52) rotate(-45)" class="${anim ? 'pillpop' : ''}" style="filter:drop-shadow(0 0 ${f ? 9 : 2}px ${PILLCOL})"><rect x="-10" y="-30" width="20" height="60" rx="10" fill="${f ? PILLCOL : 'transparent'}" fill-opacity=".85" stroke="${PILLCOL}" stroke-width="2.5"/><path d="M-10 0h20" stroke="${PILLCOL}" stroke-width="2.5"/>${f ? '' : `<rect x="-10" y="-30" width="20" height="30" rx="10" fill="${PILLCOL}" fill-opacity=".25"/>`}</g></svg>`;
 function vWater() {
   if (S.view === 'split' && partner()) return splitWater();
   const p = viewed(), dr = dailyRow(p.id, TD), oz = dr.water_oz, am = dr.amino ? 8 : 0, ex = exOz(dr), WC = WATERBLUE, js = jugsFor(p), tea = p.water_style === 'teacup';
@@ -891,8 +911,11 @@ function vWater() {
     return `<svg width="${w}" height="${h}" viewBox="0 0 56 96"><rect x="20" y="2" width="16" height="8" rx="3" fill="none" stroke="${WC}" stroke-width="2"/>${anim ? `<rect class="liquid" x="6" y="12" width="44" height="82" rx="14" fill="${WC}" fill-opacity=".85"/>` : ''}<rect x="6" y="12" width="44" height="82" rx="14" fill="${body}" fill-opacity=".85" stroke="${WC}" stroke-width="2.5" style="filter:drop-shadow(0 0 ${filled ? 9 : 2}px ${WC})"/></svg>`; };
   const cup = f => `<svg width="56" height="64" viewBox="0 0 56 64"><path d="M8 18h34v20a14 14 0 01-14 14h-6A14 14 0 018 38z" fill="${f ? WC : 'transparent'}" fill-opacity=".85" stroke="${WC}" stroke-width="2.5" style="filter:drop-shadow(0 0 ${f ? 9 : 2}px ${WC})"/><path d="M42 24h4a6 6 0 010 14h-5" fill="none" stroke="${WC}" stroke-width="2.5"/><path d="M18 8c-2 3 2 4 0 7M28 8c-2 3 2 4 0 7" fill="none" stroke="${WC}" stroke-width="2" stroke-linecap="round" opacity=".7"/></svg>`;
   const aj = isDaddy(p) && js.length === 4;
-  const jugBtns = items.map(x => { const am8 = aj && x.i === 3; return `<button class="jug ctl" ${am8 ? 'data-amino="1"' : `data-jug="${x.i}"`}>${jugSvg(x.sz, x.filled, am8 && S.anim === 'amino' && x.filled)}<span>${x.sz} OZ${am8 ? ' &middot; AMINO' : ''}</span></button>`; }).join('');
-  const cupBtn = tea ? `<button class="jug ctl" data-cup="1">${cup(oz - ex >= 128)}<span>TEA &middot; 8 OZ</span></button>` : '';
+  const jugBtns = items.map(x => { const am8 = aj && x.i === 3; return `<button class="jug ctl" ${am8 ? 'data-amino="1"' : `data-jug="${x.i}"`}>${am8 ? aminoSvg(x.filled, S.anim === 'amino' && x.filled) : jugSvg(x.sz, x.filled, false)}<span>${x.sz} OZ${am8 ? ' &middot; AMINOS' : ''}</span></button>`; }).join('');
+  const pn = dr.protein_n || 0;
+  const cupBtn = (tea ? `<button class="jug ctl" data-cup="1">${cup(oz - ex >= 128)}<span>TEA &middot; 8 OZ</span></button>` : '') +
+    (isTaylor(p) ? `<div class="jug" style="gap:4px"><button class="jug ctl" data-xtra="protein_n" data-dx="1">${proteinSvg(pn > 0, S.anim === 'protein')}<span>PROTEIN &middot; 12 OZ${pn > 1 ? ' &times;' + pn : ''}</span></button>${pn > 0 && editable() && canEdit(p.id) ? `<button class="btn ghost sm ctl" data-xtra="protein_n" data-dx="-1" style="padding:2px 10px">-1</button>` : ''}</div>
+    <button class="jug ctl" data-supp="1">${pillSvg(!!dr.supp, S.anim === 'supp')}<span>SUPPS</span></button>` : '');
   return header('<em>Water</em>') + testBar(p) + `<div class="card" style="text-align:center">${ring(176, 12, Math.min(oz / WATER, 1), WC, `<span class="num" style="font-size:40px;font-weight:800">${oz}</span><span class="lbl">of 128 oz</span>`)}
    <div class="jugs">${jugBtns}${cupBtn}</div><p class="note">Tap each jug when you finish it.${tea ? ' Your last 8 oz is the tea at night.' : ''}</p></div>
    ${aminoCard(p, dr)}
@@ -980,11 +1003,16 @@ function splitCols(fn) {
   return `<div class="split">${[S.me, pr].map(p => `<div class="p"><h3>${esc(p.name)}</h3>${fn(p)}</div>`).join('')}</div>
   <p class="note" style="margin-top:12px">Live view. Tap ${esc(S.me.name)} at the top to log your own, or ${esc(pr.name)} to look at theirs.</p>`;
 }
+const aminoMini = f => `<svg width="22" height="42" viewBox="0 0 56 96"><path d="M10 14h36l-5 76q-.5 4-5 4H20q-4.5 0-5-4z" fill="${f ? WATERBLUE : 'transparent'}" fill-opacity=".85" stroke="${WATERBLUE}" stroke-width="4"/><text x="28" y="62" text-anchor="middle" font-size="28" font-weight="800" fill="${f ? '#fff' : WATERBLUE}">A</text></svg>`;
+const proteinMini = f => `<svg width="22" height="42" viewBox="0 0 56 96"><rect x="21" y="2" width="14" height="9" rx="3" fill="none" stroke="${WATERBLUE}" stroke-width="3"/><rect x="10" y="16" width="36" height="78" rx="12" fill="${f ? WATERBLUE : 'transparent'}" fill-opacity=".85" stroke="${WATERBLUE}" stroke-width="4"/><text x="28" y="62" text-anchor="middle" font-size="28" font-weight="800" fill="${f ? '#fff' : WATERBLUE}">P</text></svg>`;
+const pillMini = f => `<svg width="30" height="42" viewBox="0 0 56 96"><g transform="translate(28 52) rotate(-45)"><rect x="-10" y="-30" width="20" height="60" rx="10" fill="${f ? PILLCOL : 'transparent'}" fill-opacity=".85" stroke="${PILLCOL}" stroke-width="4"/><path d="M-10 0h20" stroke="${PILLCOL}" stroke-width="4"/></g></svg>`;
 const jugMini = (filled) => `<svg width="24" height="42" viewBox="0 0 56 96"><rect x="20" y="2" width="16" height="8" rx="3" fill="none" stroke="${WATERBLUE}" stroke-width="3"/><rect x="6" y="12" width="44" height="82" rx="14" fill="${filled ? WATERBLUE : 'transparent'}" fill-opacity=".85" stroke="${WATERBLUE}" stroke-width="4"/></svg>`;
 function splitWater() {
   return header('<em>Water</em>') + splitCols(p => {
     const oz = dailyRow(p.id, TD).water_oz, js = jugsFor(p); let used = 0;
-    const jugs = js.map(sz => { used += sz; return jugMini(oz >= used); }).join('') + (p.water_style === 'teacup' ? `<span style="font-size:20px;opacity:${oz >= 128 ? 1 : .35}">&#9749;</span>` : '');
+    const dr = dailyRow(p.id, TD), ex = exOz(dr), am4 = isDaddy(p) && js.length === 4;
+    const jugs = js.map((sz, i) => { used += sz; return am4 && i === 3 ? aminoMini(!!dr.amino) : jugMini(oz - ex >= used); }).join('') + (p.water_style === 'teacup' ? `<span style="font-size:20px;opacity:${oz - ex >= 128 ? 1 : .35}">&#9749;</span>` : '')
+      + (isTaylor(p) ? proteinMini((dr.protein_n || 0) > 0) + pillMini(!!dr.supp) : '');
     return `<div style="text-align:center">${ring(110, 10, Math.min(oz / WATER, 1), WATERBLUE, `<span class="num" style="font-size:26px;font-weight:800">${oz}</span><span class="lbl">of 128 oz</span>`)}</div><div class="row" style="justify-content:center;gap:6px;margin-top:10px;align-items:flex-end">${jugs}</div>`;
   });
 }
@@ -1369,7 +1397,8 @@ document.addEventListener('click', async e => {
   if (d.amino) { const r = dailyRow(u, today), on = !!r.amino; if (!on) { S.anim = 'amino'; setTimeout(() => { S.anim = null; }, 1500); } return saveDaily(today, { amino: !on, water_oz: on ? Math.max(0, r.water_oz - 8) : r.water_oz + 8 }); }
   if (d.jug !== undefined) { const js = jugsFor(viewed()), am = exOz(dailyRow(u, today)), idx = +d.jug, oz = dailyRow(u, today).water_oz - am, upto = js.slice(0, idx + 1).reduce((a, b) => a + b, 0), below = js.slice(0, idx).reduce((a, b) => a + b, 0); return saveDaily(today, { water_oz: (oz >= upto ? below : upto) + am }); }
   if (d.cup) { const r = dailyRow(u, today), ex = exOz(r); return saveDaily(today, { water_oz: (r.water_oz - ex >= 128 ? 120 : 128) + ex }); }
-  if (d.xtra) { const r = dailyRow(u, today), per = d.xtra === 'coffee_n' ? 6 : 12, cur = r[d.xtra] || 0, nx = Math.max(0, cur + +d.dx); if (nx === cur) return; return saveDaily(today, { [d.xtra]: nx, water_oz: Math.max(0, r.water_oz + (nx - cur) * per) }); }
+  if (d.supp) { const r = dailyRow(u, today), on = !!r.supp; if (!on) { S.anim = 'supp'; setTimeout(() => { S.anim = null; }, 1500); } return saveDaily(today, { supp: !on }); }
+  if (d.xtra) { const r = dailyRow(u, today), per = d.xtra === 'coffee_n' ? 6 : 12, cur = r[d.xtra] || 0, nx = Math.max(0, cur + +d.dx); if (nx === cur) return; if (nx > cur && d.xtra === 'protein_n') { S.anim = 'protein'; setTimeout(() => { S.anim = null; }, 1500); } return saveDaily(today, { [d.xtra]: nx, water_oz: Math.max(0, r.water_oz + (nx - cur) * per) }); }
   if (d.rclose) {
     const cur = dailyRow(u, today).pages, next = cur >= 10 ? 0 : 10, delta = next - cur;
     await saveDaily(today, { pages: next });
