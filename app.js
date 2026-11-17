@@ -606,8 +606,8 @@ function histDays(u, name) {
 function histMetrics(days) {
   const all = days.flatMap(d => d.rows), M = [];
   if (all.some(r => +r.weight > 0 && r.reps)) {
+    M.push({ k: 'top', label: 'Max weight', unit: 'lb', f: d => Math.max(0, ...d.rows.map(r => +r.weight || 0)) });
     M.push({ k: 'e1rm', label: 'Est. 1-rep max', unit: 'lb', f: d => Math.max(0, ...d.rows.filter(r => +r.weight > 0 && r.reps).map(r => e1rm(+r.weight, r.reps))) });
-    M.push({ k: 'top', label: 'Top weight', unit: 'lb', f: d => Math.max(0, ...d.rows.map(r => +r.weight || 0)) });
     M.push({ k: 'vol', label: 'Total volume', unit: 'lb', f: d => d.rows.reduce((n, r) => n + (+r.weight || 0) * (r.reps || 0), 0) });
   }
   if (all.some(r => r.reps && !(+r.weight > 0))) M.push({ k: 'reps', label: 'Total reps', unit: 'reps', f: d => d.rows.reduce((n, r) => n + (r.reps || 0), 0) });
@@ -631,17 +631,31 @@ function liftHistory(p) {
   const met = M.find(x => x.k === S.hmetric) || M[0], fmt = met.fmt, f = fmt || (v => String(Math.round(v * 10) / 10));
   const pts = days.map(d => ({ day: d.day, v: met.f(d), d }));
   S._hp = pts.map(x => `${pretty(x.day)}: ${f(x.v)} ${met.unit} (${x.d.rows.map(fmtSet).join(', ').replace(/&middot;/g, '-')})`);
+  const cut = addDays(TD, -9), recent = days.filter(d => d.day >= cut), topM = M.find(x => x.k === 'top');
+  const pr10 = topM && recent.length ? Math.max(...recent.map(d => topM.f(d))) : null;   // heaviest single set in the past 10 days, in lb
   const first = pts[0].v, last = pts[pts.length - 1].v, best = Math.max(...pts.map(x => x.v)), delta = last - first;
   const trend = pts.length < 2 ? 'Log this lift on another day to see a trend.' : delta > 0 ? `Up ${f(delta)} ${met.unit} since ${pretty(pts[0].day)}.` : delta < 0 ? `Down ${f(-delta)} ${met.unit} since ${pretty(pts[0].day)}.` : `Level with ${pretty(pts[0].day)}.`;
   const chips = M.map(x => `<button data-hmetric="${x.k}" class="${x.k === met.k ? 'on' : ''}">${x.label}</button>`).join('');
   const rows = days.slice().reverse().map(d => `<div style="border-top:1px solid var(--line);padding:10px 0"><div class="row sp"><b style="font-size:14px">${pretty(d.day)}</b><span class="note" style="margin:0">${f(met.f(d))} ${met.unit}</span></div><div class="note" style="margin:3px 0 0">${d.rows.map(fmtSet).join(' &middot; ')}</div></div>`).join('');
   return head + `<div class="card"><div class="lbl">${esc(name)}</div>
-    <div class="statgrid" style="margin-top:12px;grid-template-columns:repeat(3,1fr)"><div class="tile" style="padding:12px 10px"><span class="lbl" style="font-size:10px">Best</span><b style="font-size:22px">${f(best)}</b><span class="note" style="margin:0;font-size:11px">${met.unit}</span></div><div class="tile" style="padding:12px 10px"><span class="lbl" style="font-size:10px">Latest</span><b style="font-size:22px">${f(last)}</b><span class="note" style="margin:0;font-size:11px">${met.unit}</span></div><div class="tile" style="padding:12px 10px"><span class="lbl" style="font-size:10px">Sessions</span><b style="font-size:22px">${pts.length}</b><span class="note" style="margin:0;font-size:11px">${'logged'}</span></div></div></div>
+    <div class="statgrid" style="margin-top:12px;grid-template-columns:repeat(${pr10 != null ? 4 : 3},1fr);gap:6px">${pr10 != null ? `<div class="tile" style="padding:12px 10px"><span class="lbl" style="font-size:10px">10-day PR</span><b style="font-size:22px">${Math.round(pr10 * 10) / 10}</b><span class="note" style="margin:0;font-size:11px">lb max</span></div>` : ''}<div class="tile" style="padding:12px 10px"><span class="lbl" style="font-size:10px">Best</span><b style="font-size:22px">${f(best)}</b><span class="note" style="margin:0;font-size:11px">${met.unit}</span></div><div class="tile" style="padding:12px 10px"><span class="lbl" style="font-size:10px">Latest</span><b style="font-size:22px">${f(last)}</b><span class="note" style="margin:0;font-size:11px">${met.unit}</span></div><div class="tile" style="padding:12px 10px"><span class="lbl" style="font-size:10px">Sessions</span><b style="font-size:22px">${pts.length}</b><span class="note" style="margin:0;font-size:11px">${'logged'}</span></div></div></div>
     <div class="card"><div class="chips" style="margin-top:0">${chips}</div><div class="note" id="hnote" style="margin:0 0 6px">${trend} The gold dot is your best.</div>${histChart(pts, met.unit, fmt)}</div>
     <div class="card"><div class="lbl" style="margin-bottom:4px">Every session</div>${rows}</div>`;
 }
 // 5 ... 0 countdown. The indoor timer starts the moment it hits 0.
-function startCountdown() {
+// "Doing this together?" When one of you starts a workout, offer to put it on the other person's profile too.
+const otherOf = u => D.profiles.find(p => p.id !== u) || null;
+function askTogether(u, kind) {
+  const pr = otherOf(u); if (!pr || wRow(pr.id, TD, kind)) return false;
+  return confirm(`Doing this ${kind} workout together with ${pr.name}?\n\nOK adds it to ${pr.name}'s profile too, with the same lifts and its own timer, so you each track your own sets.`);
+}
+function shareWorkout(u, row) {   // copy a just-started workout to the other person (the plan only; their sets stay their own)
+  const pr = otherOf(u); if (!pr || wRow(pr.id, row.day, row.kind)) return;
+  const copy = { ...row, user_id: pr.id, done_at: null, paused_at: null, paused_ms: 0 };
+  if (row.kind === 'indoor' && row.session) copy.session = { ...row.session, order: [], done: {}, step: 'go' };
+  saveWorkout(copy);
+}
+function startCountdown(together) {
   if ($('cd')) return;
   const el = document.createElement('div'); el.id = 'cd';
   el.style.cssText = 'position:fixed;inset:0;z-index:98;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.86)';
@@ -650,7 +664,7 @@ function startCountdown() {
   show();
   const iv = setInterval(() => {
     n--; show();
-    if (n === 0) { clearInterval(iv); { const u0 = actor().id; S.lstamp = u0 + '|' + sj(lState()); S.llast = Date.now(); saveWorkout({ user_id: u0, day: TD, kind: 'indoor', type: S.wtype.indoor || 'Lift', started_at: new Date().toISOString(), done_at: null, override: false, session: lState() }); } setTimeout(() => el.remove(), 900); }
+    if (n === 0) { clearInterval(iv); { const u0 = actor().id; S.lstamp = u0 + '|' + sj(lState()); S.llast = Date.now(); const row0 = { user_id: u0, day: TD, kind: 'indoor', type: S.wtype.indoor || 'Lift', started_at: new Date().toISOString(), done_at: null, override: false, session: lState() }; saveWorkout(row0); if (together) shareWorkout(u0, row0); } setTimeout(() => el.remove(), 900); }
   }, 1000);
 }
 function vWorkoutPage(k, p) {
@@ -688,6 +702,14 @@ function vMeals() {
    <div class="row" style="margin-top:14px"><input type="text" id="gnew" placeholder="Add an item" maxlength="200"><button class="btn sm" id="gadd">Add</button></div></div>`;
 }
 // The confirm sheet: "I'm seeing these. Add or remove anything, then confirm."
+const MUNITS = ['cup', 'tbsp', 'tsp', 'oz', 'slice', 'piece', ''];
+// Reads the "how much / what" row at the bottom of the sheet into an ingredient, and clears it.
+function mxTake() {
+  const el = $('mxnew'), v = el ? el.value.trim() : ''; if (!v) return null;
+  const q = ($('mxq') || {}).value?.trim() || '1', u = ($('mxu') || {}).value || '';
+  el.value = ''; if ($('mxq')) $('mxq').value = '';
+  return { name: v, qty: (q + ' ' + u).trim() };
+}
 function drawMx() {
   let el = $('mx'); const m = S.mx;
   if (!m) { if (el) el.remove(); return; }
@@ -700,7 +722,7 @@ function drawMx() {
    <input type="text" data-mxf="name" value="${esc(m.name)}" maxlength="80" placeholder="Name this meal" style="margin-top:14px;font-size:20px;font-weight:700">
    <div class="lbl" style="margin-top:16px">${m.edit ? 'Ingredients' : m.items.length ? "I'm seeing" : m.b64 ? "Add what's on the plate" : 'What is in it'}</div>
    ${m.items.map((i, k) => `<div class="row" style="padding:9px 0;border-top:1px solid var(--line);gap:10px"><span style="flex:1;font-size:16px">${esc((i.qty ? i.qty + ' ' : '') + i.name)}</span><button class="xbtn" data-mx="deli" data-i="${k}" aria-label="Take out">&times;</button></div>`).join('')}
-   <div class="row" style="gap:8px;margin-top:10px"><input type="text" id="mxnew" placeholder="Add something (e.g. 2 eggs)" maxlength="80"><button class="btn ghost sm" data-mx="addi">Add</button></div>
+   <div class="row" style="gap:6px;margin-top:10px;flex-wrap:nowrap"><input type="text" id="mxq" inputmode="decimal" placeholder="1" maxlength="6" style="width:58px;flex:none"><select id="mxu" style="width:auto;flex:none">${MUNITS.map(u => `<option value="${u}">${u || 'whole'}</option>`).join('')}</select><input type="text" id="mxnew" placeholder="food (rice, eggs...)" maxlength="80" style="min-width:0"><button class="btn ghost sm" data-mx="addi">Add</button></div>
    ${m.note ? `<p class="note" style="margin:10px 0 0">${esc(m.note)}</p>` : ''}
    <div class="lbl" style="margin-top:18px">Macros</div>
    <div class="lgrid" style="grid-template-columns:1fr 1fr">${num('cal', 'Calories')}${num('pro', 'Protein (g)')}</div><div class="lgrid" style="grid-template-columns:1fr 1fr">${num('carb', 'Carbs (g)')}${num('fat', 'Fat (g)')}</div>
@@ -713,7 +735,7 @@ function drawMx() {
 async function mxAI(mode) {
   const m = S.mx; if (!m) return; m.step = 'analyzing'; m.err = ''; drawMx();
   try {
-    const body = mode === 'recalc' ? { mode, name: m.name, items: m.items.filter(i => i.name.trim()) } : { mode, image: m.b64 };
+    const body = mode === 'recalc' ? { mode, name: m.name, items: m.items.filter(i => i.name.trim()) } : { mode, image: m.b64, hint: 'Measure every ingredient in household units only (cups, tbsp, tsp, oz, slices, pieces or counts). Never use grams or milliliters.' };
     const { data, error } = await sb.functions.invoke('analyze-meal', { body });
     if (S.mx !== m) return;
     const why = { no_key: "AI isn't connected yet, so type the macros in below.", bad_key: "The AI key was rejected. Check the numbers below.", rate_limited: "The free AI is busy right now. Wait a minute and try again, or type the macros in below.", daily_limit: "That is the daily AI limit. Type the macros in below, and it resets tomorrow." };
@@ -755,7 +777,7 @@ function mxEdit(table, id) {
 }
 async function mxSaveEdit() {
   const m = S.mx; if (!m || !m.edit) return;
-  const addEl = $('mxnew'); if (addEl && addEl.value.trim()) { m.items.push({ name: addEl.value.trim(), qty: '' }); m.dirty = true; }
+  { const it = mxTake(); if (it) { m.items.push(it); m.dirty = true; } }
   clearTimeout(mxSoon.t);
   if (m.dirty && m.items.some(i => i.name.trim())) { m.step = 'saving'; drawMx(); await mxCalc(); if (S.mx !== m) return; }
   const name = m.name.trim() || (m.items[0] && m.items[0].name); if (!name) { m.step = 'review'; drawMx(); toast('Name the meal first.'); return; }
@@ -768,7 +790,7 @@ async function mxSaveEdit() {
 async function mxLog() {
   const m = S.mx; if (!m) return;
   if (m.edit) return mxSaveEdit();
-  const addEl = $('mxnew'); if (addEl && addEl.value.trim()) { m.items.push({ name: addEl.value.trim(), qty: '' }); m.dirty = true; }
+  { const it = mxTake(); if (it) { m.items.push(it); m.dirty = true; } }
   if (!m.name.trim() && !m.items.length) { toast('Name the meal first.'); return; }
   clearTimeout(mxSoon.t);
   if (m.dirty && m.items.some(i => i.name.trim())) { m.step = 'saving'; drawMx(); await mxCalc(); if (S.mx !== m) return; }
@@ -808,7 +830,7 @@ async function mxAction(d, t) {
   if (d.mxsdel) { if (!confirm('Delete this saved meal? Your past logs stay.')) return; const r = (D.saved || []).find(x => x.id === d.mxsdel); D.saved = (D.saved || []).filter(x => x.id !== d.mxsdel); S.mopen = null; render(); const { error } = await sb.from('saved_meals').delete().eq('id', d.mxsdel); if (error) { toast(error.message); await loadAll(); render(); } else if (r) dropPhoto(r.photo_path); return; }
   if (!m) return;
   if (d.mx === 'cancel') { S.mx = null; drawMx(); return; }
-  if (d.mx === 'addi') { const el = $('mxnew'), v = el ? el.value.trim() : ''; if (!v) return; m.items.push({ name: v, qty: '' }); drawMx(); mxSoon(); const n = $('mxnew'); if (n) n.focus(); return; }
+  if (d.mx === 'addi') { const it = mxTake(); if (!it) return; m.items.push(it); drawMx(); mxSoon(); const n = $('mxnew'); if (n) n.focus(); return; }
   if (d.mx === 'deli') { m.items.splice(+d.i, 1); drawMx(); mxSoon(); return; }
   if (d.mx === 'log') return mxLog();
 }
@@ -1237,7 +1259,7 @@ document.addEventListener('click', async e => {
     const idle = wInfo(wRow(u, TD, 'indoor')).st === 'idle';
     lInit(); S.wtype.indoor = det.type; S.lsel = det.sel.slice(); S.plan = JSON.parse(JSON.stringify(det.plan)); S.lorder = []; S.ldone = {}; S.opn = {}; S.hist = null; S.lstep = 'go'; lSave();
     S.tab = 'workouts'; S.sub = 'indoor'; $('app').scrollTo(0, 0); render();
-    if (idle) startCountdown();
+    if (idle) startCountdown(askTogether(u, 'indoor'));
     return;
   }
   if (t.id === 'lgo') {
@@ -1246,7 +1268,7 @@ document.addEventListener('click', async e => {
     if (o.st === 'running' || o.st === 'paused') { toast('Finish your outdoor workout first.'); return; }
     if (S.tab !== 'workouts') { S.tab = 'workouts'; S.sub = 'indoor'; }
     setLstep('go'); $('app').scrollTo(0, 0); render();
-    if (w.st === 'idle') startCountdown();
+    if (w.st === 'idle') startCountdown(askTogether(u, 'indoor'));
     return;
   }
   if (d.lplan) { S.hist = null; setLstep('plan'); $('app').scrollTo(0, 0); render(); return; }
@@ -1381,7 +1403,9 @@ document.addEventListener('click', async e => {
   if (d.start) {
     const k = d.start, other = wInfo(wRow(u, today, k === 'indoor' ? 'outdoor' : 'indoor'));
     const types = k === 'indoor' ? ['Lift'] : ['Walk'];
-    return saveWorkout({ user_id: u, day: today, kind: k, type: S.wtype[k] || types[0], started_at: new Date().toISOString(), done_at: null, override: false });
+    const row = { user_id: u, day: today, kind: k, type: S.wtype[k] || types[0], started_at: new Date().toISOString(), done_at: null, override: false };
+    const tog = k === 'outdoor' && askTogether(u, k);
+    await saveWorkout(row); if (tog) shareWorkout(u, row); return;
   }
   if (d.pause) { const row = wRow(u, today, d.pause); return saveWorkout({ ...row, paused_at: new Date().toISOString() }); }
   if (d.resume) { const row = wRow(u, today, d.resume); return saveWorkout({ ...row, paused_ms: (row.paused_ms || 0) + (Date.now() - +new Date(row.paused_at)), paused_at: null }); }
