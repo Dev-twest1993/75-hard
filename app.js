@@ -283,6 +283,25 @@ document.addEventListener('pointerdown', e => {
   window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 });
 
+// ---------- Daddy's one-way message to Taylor's phone ----------
+const NUDGES = ['Drink your water', 'Get your workout in', 'Go read your 10 pages', 'Progress photo time', 'Proud of you', 'Love you'];
+function nudgeTile() {
+  const pr = partner(); if (!pr || !isDaddy(S.me) || S.view === 'partner') return '';
+  return `<div class="card"><div class="lbl">Message ${esc(pr.name)}</div><p class="note" style="margin:6px 0 10px">Goes to her phone as a notification. One way.</p>
+   <div class="chips" style="margin:0 0 12px">${NUDGES.map(m => `<button class="ctl" data-nudge="${esc(m)}">${esc(m)}</button>`).join('')}</div>
+   <div class="row" style="gap:8px"><input type="text" id="nmsg" maxlength="140" placeholder="Type your own message" style="min-width:0"><button class="btn sm ctl" data-nudgego="1">Send</button></div></div>`;
+}
+async function sendNudge(msg) {
+  msg = String(msg || '').trim(); if (!msg || S.nudging) return;
+  S.nudging = true;
+  try {
+    const { data, error } = await sb.functions.invoke('nudge', { body: { message: msg } });
+    const why = { no_subs: "She hasn't turned on notifications on her phone yet.", not_allowed: 'Only your profile can send these.', no_keys: 'Notifications are not set up yet.' };
+    if (error || !data || data.error) toast((data && why[data.error]) || "Couldn't send that. Try again.");
+    else { toast('Sent to ' + (partner()?.name || 'her') + '.'); const el = $('nmsg'); if (el) el.value = ''; }
+  } catch (e) { toast("Couldn't send that. Try again."); }
+  S.nudging = false;
+}
 function vToday() {
   const pr = partner(), v = viewed();
   if (S.view === 'split') {
@@ -309,7 +328,7 @@ function vToday() {
         : k === 'reading' ? readTile(v)
         : k === 'photo' ? photoTile(v)
         : `<div class="card dtile" data-tile="single">${GRIP}<div class="lbl" style="margin-bottom:14px">Today's rings</div><div class="rings">${small}</div></div>`).join('')}</div>
-    <div style="height:14px"></div>${other}
+    <div style="height:14px"></div>${other}${nudgeTile()}
     <div style="text-align:center;margin-top:8px"><button class="link" id="signout">Sign out</button></div>`;
 }
 
@@ -1421,6 +1440,8 @@ document.addEventListener('click', async e => {
   if (d.amino) { const r = dailyRow(u, today), on = !!r.amino; if (!on) { S.anim = 'amino'; setTimeout(() => { S.anim = null; }, 1500); } return saveDaily(today, { amino: !on, water_oz: on ? Math.max(0, r.water_oz - 8) : r.water_oz + 8 }); }
   if (d.jug !== undefined) { const js = jugsFor(viewed()), am = exOz(dailyRow(u, today)), idx = +d.jug, oz = dailyRow(u, today).water_oz - am, upto = js.slice(0, idx + 1).reduce((a, b) => a + b, 0), below = js.slice(0, idx).reduce((a, b) => a + b, 0); return saveDaily(today, { water_oz: (oz >= upto ? below : upto) + am }); }
   if (d.cup) { const r = dailyRow(u, today), ex = exOz(r); return saveDaily(today, { water_oz: (r.water_oz - ex >= 128 ? 120 : 128) + ex }); }
+  if (d.nudge) { if (!isDaddy(S.me)) return; return sendNudge(d.nudge); }
+  if (d.nudgego) { if (!isDaddy(S.me)) return; return sendNudge(($('nmsg') || {}).value); }
   if (d.supp) { const r = dailyRow(u, today), on = !!r.supp; if (!on) { S.anim = 'supp'; setTimeout(() => { S.anim = null; }, 1500); } return saveDaily(today, { supp: !on }); }
   if (d.xtra) { const r = dailyRow(u, today), per = d.xtra === 'coffee_n' ? 6 : 12, cur = r[d.xtra] || 0, nx = Math.max(0, cur + +d.dx); if (nx === cur) return; if (nx > cur && d.xtra === 'protein_n') { S.anim = 'protein'; setTimeout(() => { S.anim = null; }, 1500); } return saveDaily(today, { [d.xtra]: nx, water_oz: Math.max(0, r.water_oz + (nx - cur) * per) }); }
   if (d.rclose) {
