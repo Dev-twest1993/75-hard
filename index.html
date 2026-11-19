@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="app-version" content="2026-11-19c">
+<meta name="app-version" content="2026-11-20a">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -54,6 +54,16 @@ h1 em{color:var(--acc);padding-right:.15em}
 svg{overflow:visible}
 svg .glow{filter:drop-shadow(0 0 3px currentColor) drop-shadow(0 0 8px currentColor)}
 .dtile{position:relative}
+.zl{font-size:11px;letter-spacing:.14em;color:var(--dim);margin:20px 0 8px 2px;text-transform:uppercase;font-weight:700}
+.dayhdr{display:flex;align-items:center;gap:16px;padding:12px 16px}.dayhdr .dh2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--acc);font-weight:700;margin-top:2px}
+.tz{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:10px}.tz>.card{margin:0}.tz>[data-tile=all]{grid-column:1/-1}
+[data-tile=all]{padding-top:30px}[data-tile=all] .grip{top:0;right:0}
+.cmp{padding:12px 10px}.cmp .lbl{padding-right:36px}
+.ringrow{display:flex;align-items:center;gap:14px}.ringrow .big{flex:none;margin:0}.lgcol{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.lgrow{display:flex;align-items:center;gap:8px;background:none;border:0;color:var(--text);font-size:14px;padding:7px 0;text-align:left;width:100%}
+.lgrow i{width:10px;height:10px;border-radius:50%;flex:none}.lgrow span{flex:1}.lgrow b{font-weight:600;color:var(--dim);font-size:13px}.lgrow b.dn{color:#30d158}
+:not([data-dragbox])>.dtile>.grip{display:none}
+
 .cdnum{font-size:210px;font-weight:800;line-height:1;color:var(--acc);text-shadow:0 0 40px rgba(47,217,143,.7);animation:cdpulse 1s ease-in-out both}
 @keyframes cdpulse{0%{transform:scale(.3);opacity:0}30%{transform:scale(1.35);opacity:1}55%{transform:scale(.85)}80%{transform:scale(1.12)}100%{transform:scale(1);opacity:.95}}
 .btn.amber{background:#f0b44c;color:#1d1403;box-shadow:0 6px 22px rgba(240,180,76,.28)}
@@ -239,6 +249,6 @@ textarea{background:rgba(0,0,0,.35);border:1px solid var(--line);color:var(--tex
 <div class="banner" id="banner"></div>
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="app.js?v=2026-11-19c"></script>
+<script src="app.js?v=2026-11-20a"></script>
 </body>
 </html>

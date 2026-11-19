@@ -243,15 +243,15 @@ function dayCounter(p) {
 function testBar(p) { return dayNum(p) < 1 ? `<div class="roBar" style="color:var(--acc2)">Practice mode until ${pretty(p.start_date)}. Log whatever you like to try things out. None of it counts toward your 75 days.</div>` : ''; }
 
 const GRIP = '<button class="grip" aria-label="Drag to reorder"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></button>';
-const TILE_IDS = ['days', 'all', 'single', 'cal', 'reading', 'photo'];
+const TILE_IDS = ['all', 'reading', 'photo'];   // the tiles you can drag inside the Today zone
 function tileOrder() {
   try {
-    let o = JSON.parse(localStorage.getItem('tileOrder'));
+    let o = JSON.parse(localStorage.getItem('tileOrder2'));
     if (Array.isArray(o)) { o = o.filter(k => TILE_IDS.includes(k)); for (const k of TILE_IDS) if (!o.includes(k)) o.push(k); if (o.length === TILE_IDS.length) return o; }
   } catch (_) { }
   return TILE_IDS.slice();
 }
-function saveTileOrder(o) { try { localStorage.setItem('tileOrder', JSON.stringify(o)); } catch (_) { } }
+function saveTileOrder(o) { try { localStorage.setItem('tileOrder2', JSON.stringify(o)); } catch (_) { } }
 // Drag any tile by its grip; the tiles it passes slide out of the way. Release to drop it in that spot.
 document.addEventListener('pointerdown', e => {
   const g = e.target.closest('.grip'); if (!g) return;
@@ -388,23 +388,22 @@ function vToday() {
     return header('Today') + `<div class="card" style="text-align:center${WIDE() ? '' : ';padding:12px'}"><div class="big">${ring(WIDE() ? 200 : 140, WIDE() ? 12 : 10, c.frac, '#00e676', `<span class="days" style="font-size:${WIDE() ? 64 : 42}px">${c.left}</span><span class="dayslbl" style="${LB}">${c.sub}</span>${c.day ? `<span class="dayslbl" style="${LB};color:var(--acc);font-weight:700;margin-top:3px">${c.day}</span>` : ''}`)}</div></div><div class="split">${col(S.me)}${col(pr)}</div>${cal75([S.me, pr])}
       <p class="note" style="margin-top:12px">Live view. When ${esc(pr.name)} checks something off, it shows up here.</p>`;
   }
-  const f = rings(v.id, TD), c = dayCounter(v);
+  const f = rings(v.id, TD), c = dayCounter(v), closed = Object.values(f).filter(x => x >= 1).length;
   const go = n => n === 'indoor' || n === 'outdoor' ? 'workouts' : n === 'water' ? 'water' : n === 'reading' ? 'today' : 'progress';
-  const small = Object.keys(NAMES).map(n => `<button data-go="${go(n)}">${ring(60, 7, f[n], COLORS[n], `<span class="num" style="font-size:12px">${Math.round(f[n] * 100)}%</span>`)}<span class="n">${NAMES[n]}</span></button>`).join('');
   let other = '';
   if (pr && editable()) { const n = Object.values(rings(pr.id, TD)).filter(x => x >= 1).length; other = `<div class="card"><div class="lbl">${esc(pr.name)} right now</div><div style="margin:6px 0 10px;font-size:15px">${n} of 5 rings closed</div>${allRings(pr.id, { size: 200, stroke: 14, step: 17 })}</div>`; }
   if (!pr) other = `<div class="card"><div class="lbl">Waiting for your partner</div><p class="note" style="margin:8px 0 0">Once they create their account, their rings show up here live.</p></div>`;
-  return header('Good <em>' + greet() + '</em>') + testBar(v) +
-    `<div id="tiles" data-dragbox="today">${tileOrder().map(k => k === 'days'
-      ? `<div class="card dtile" data-tile="days">${GRIP}<div class="big">${ring(280, 13, c.frac, '#00e676', `<span class="days">${c.left}</span><span class="dayslbl">${c.sub}</span>${c.day ? `<span class="dayslbl" style="color:var(--acc);font-weight:700">${c.day}</span>` : ''}`)}</div>${c.note ? `<p class="note" style="text-align:center;margin:0">${c.note}</p>` : ''}</div>`
-      : k === 'all'
-        ? `<div class="card dtile" data-tile="all">${GRIP}${allRings(v.id)}</div>`
-        : k === 'cal' ? calTile(v)
-        : k === 'reading' ? readTile(v)
-        : k === 'photo' ? photoTile(v)
-        : `<div class="card dtile" data-tile="single">${GRIP}<div class="lbl" style="margin-bottom:14px">Today's rings</div><div class="rings">${small}</div></div>`).join('')}</div>
-    <div style="height:14px"></div>${other}${nudgeTile()}${verseTile()}
-    <div style="text-align:center;margin-top:8px"><button class="link" id="signout">Sign out</button></div>`;
+  const hdr = `<div class="card dayhdr">${ring(84, 7, c.frac, '#00e676', `<span class="num" style="font-size:28px;font-weight:800">${c.left}</span>`)}<div><div style="font-size:16px;font-weight:700">${c.sub}</div>${c.day ? `<div class="dh2">${c.day}</div>` : ''}${c.note ? `<div class="note" style="margin:4px 0 0">${c.note}</div>` : `<div class="note" style="margin:4px 0 0">${closed} of 5 rings closed</div>`}</div></div>`;
+  const legend = Object.keys(NAMES).map(k => `<button class="lgrow" data-go="${go(k)}"><i style="background:${RCOL[k]}"></i><span>${NAMES[k]}</span><b class="${f[k] >= 1 ? 'dn' : ''}">${f[k] >= 1 ? 'Done' : Math.round(f[k] * 100) + '%'}</b></button>`).join('');
+  const tile = k => k === 'all'
+    ? `<div class="card dtile" data-tile="all">${GRIP}<div class="ringrow">${allRings(v.id, { size: 124, stroke: 10, step: 12, legend: false })}<div class="lgcol">${legend}</div></div></div>`
+    : k === 'reading' ? readTile(v) : photoTile(v);
+  const zl = t => `<div class="zl">${t}</div>`;
+  return header('Good <em>' + greet() + '</em>') + testBar(v) + hdr +
+    zl('Today') + `<div id="tiles" class="tz" data-dragbox="today">${tileOrder().map(tile).join('')}</div>${other}` +
+    zl('Plan') + calTile(v) +
+    zl('Faith') + verseTile() + nudgeTile() +
+    `<div style="text-align:center;margin-top:14px"><button class="link" id="signout">Sign out</button></div>`;
 }
 
 // ---------- 75-day ring calendar (split Today) ----------
@@ -497,13 +496,13 @@ async function saveDayPlan(u, day, items, detail) {
 }
 function photoTile(v) {
   const done = !!dailyRow(v.id, TD).photo_path, ed = editable() && canEdit(v.id);
-  const r = ring(130, 12, done ? 1 : 0, COLORS.photo, `<span class="num" style="font-size:26px;font-weight:800">${done ? tick : '+'}</span><span class="lbl">${done ? 'photo done' : 'add photo'}</span>`);
-  return `<div class="card dtile" data-tile="photo">${GRIP}<div class="lbl" style="margin-bottom:12px">Progress photo</div><div class="big">${ed ? `<button class="ctl" data-phopen="1" style="background:none;border:0;padding:0;color:inherit" aria-label="Take or choose today's photo">${r}</button>` : r}</div><p class="note" style="text-align:center;margin:10px 0 0">${done ? 'Saved to your Progress page. Tap the ring to replace it.' : 'Tap the ring to take or choose today\'s photo.'}</p>${done && ed ? '<div class="row" style="justify-content:center;margin-top:12px"><button class="btn amber sm ctl" data-phundo="1">Undo</button></div>' : ''}</div>`;
+  const r = ring(96, 9, done ? 1 : 0, COLORS.photo, `<span class="num" style="font-size:22px;font-weight:800">${done ? tick : '+'}</span>`);
+  return `<div class="card dtile cmp" data-tile="photo">${GRIP}<div class="lbl" style="margin-bottom:8px">Photo</div><div class="big">${ed ? `<button class="ctl" data-phopen="1" style="background:none;border:0;padding:0;color:inherit" aria-label="Take or choose today's photo">${r}</button>` : r}</div><p class="note" style="text-align:center;margin:8px 0 0">${done ? 'Saved. Tap to replace.' : 'Tap to add today\'s photo.'}</p>${done && ed ? '<div class="row" style="justify-content:center;margin-top:8px"><button class="btn amber sm ctl" data-phundo="1">Undo</button></div>' : ''}</div>`;
 }
 function readTile(v) {
   const pages = dailyRow(v.id, TD).pages, done = pages >= 10, ed = editable() && canEdit(v.id);
-  const r = ring(130, 12, Math.min(pages / 10, 1), COLORS.reading, `<span class="num" style="font-size:30px;font-weight:800">${pages}</span><span class="lbl">of 10 pages</span>`);
-  return `<div class="card dtile" data-tile="reading">${GRIP}<div class="lbl" style="margin-bottom:12px">Reading</div><div class="big">${ed ? `<button class="ctl" data-rclose="1" style="background:none;border:0;padding:0;color:inherit" aria-label="${done ? 'Reading done. Tap to undo' : 'Tap to close the reading ring'}">${r}</button>` : r}</div><p class="note" style="text-align:center;margin:10px 0 0">${done ? 'Reading is done. Tap the ring to undo.' : 'Finished your 10 pages? Tap the ring to close it.'}</p></div>`;
+  const r = ring(96, 9, Math.min(pages / 10, 1), COLORS.reading, `<span class="num" style="font-size:24px;font-weight:800">${pages}</span><span class="lbl" style="font-size:9px">of 10 pages</span>`);
+  return `<div class="card dtile cmp" data-tile="reading">${GRIP}<div class="lbl" style="margin-bottom:8px">Reading</div><div class="big">${ed ? `<button class="ctl" data-rclose="1" style="background:none;border:0;padding:0;color:inherit" aria-label="${done ? 'Reading done. Tap to undo' : 'Tap to close the reading ring'}">${r}</button>` : r}</div><p class="note" style="text-align:center;margin:8px 0 0">${done ? 'Done. Tap the ring to undo.' : 'Tap the ring when you hit 10 pages.'}</p></div>`;
 }
 function greet() { const h = new Date().getHours(); return h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'; }
 
