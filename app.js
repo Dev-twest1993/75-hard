@@ -327,7 +327,12 @@ const VERSE_POOL = [
 ];
 // A fixed shuffle, so every device shows the same verse on the same day. The last verse stays last, to finish on Day 75.
 const VERSES = (() => { const a = VERSE_POOL.slice(0, -1); let x = 7511; const rnd = () => { x |= 0; x = x + 0x6D2B79F5 | 0; let t = Math.imul(x ^ x >>> 15, 1 | x); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return [...a, VERSE_POOL[VERSE_POOL.length - 1]]; })();
-function verseFor(p) { const n = dayNum(p), i = Math.min(VERSES.length, Math.max(1, Math.ceil(Math.max(n, 1) / 2))); return { n, wk: i, ref: VERSES[i - 1][0], text: VERSES[i - 1][1], sum: VERSES[i - 1][2] }; }
+const VERSE_START = '2026-11-18';   // the day the verses began: verse 1 shows on this day, and the last verse lands on Day 75
+function verseFor(p) {
+  const n = dayNum(p), s0 = Math.max(1, dayNum(p, VERSE_START)), total = Math.min(VERSES.length, Math.max(1, Math.ceil((75 - s0 + 1) / 2)));
+  const list = [...VERSES.slice(0, total - 1), VERSES[VERSES.length - 1]], i = Math.min(total, Math.max(1, Math.ceil((Math.max(n, s0) - s0 + 1) / 2)));
+  return { n, wk: i, total, ref: list[i - 1][0], text: list[i - 1][1], sum: list[i - 1][2] };
+}
 function verseHtml(v, hide) {
   const words = v.text.split(' '); let k = 0;
   return words.map(w => { k++; if (!hide || k % 2) return esc(w); const m = w.match(/^(\W*)(\w)(\w*)(\W*)$/); return m ? esc(m[1] + m[2]) + '<span style="opacity:.55">' + '_'.repeat(Math.max(2, m[3].length)) + '</span>' + esc(m[4]) : esc(w); }).join(' ');
@@ -335,7 +340,7 @@ function verseHtml(v, hide) {
 function drawVerse() {
   const o = $('overlay'), v = verseFor(S.me);
   o.innerHTML = `<div class="over" style="overflow-y:auto"><div class="box2" id="verseBox" style="margin:auto;width:100%;text-align:center">
-    <div class="e">${v.n >= 1 ? 'Day ' + v.n + ' &middot; ' : ''}Verse ${v.wk} of ${VERSES.length}</div>
+    <div class="e">${v.n >= 1 ? 'Day ' + v.n + ' &middot; ' : ''}Verse ${v.wk} of ${v.total}</div>
     <div class="m" style="font-size:22px;line-height:1.45;margin:16px 0 10px">&ldquo;${verseHtml(v, S.vhide)}&rdquo;</div>
     <div style="font-weight:700;margin-bottom:6px">${esc(v.ref)}</div>
     <p style="margin:0 0 18px;font-size:14px;line-height:1.5;color:var(--dim)">${esc(v.sum)}</p>
