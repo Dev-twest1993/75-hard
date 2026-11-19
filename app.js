@@ -284,6 +284,74 @@ document.addEventListener('pointerdown', e => {
   window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 });
 
+// ---------- scripture memory: one verse every 2 days (KJV, public domain), shown the first time you open the app each day ----------
+const VERSE_POOL = [
+  ['Philippians 4:13', 'I can do all things through Christ which strengtheneth me.', 'You\'re not doing this alone. Christ gives you the strength for whatever is in front of you today.'],
+  ['Joshua 1:9', 'Have not I commanded thee? Be strong and of a good courage; be not afraid, neither be thou dismayed: for the LORD thy God is with thee whithersoever thou goest.', 'God tells you to be brave because he is with you everywhere you go. Fear doesn\'t get the last word.'],
+  ['Proverbs 3:5-6', 'Trust in the LORD with all thine heart; and lean not unto thine own understanding. In all thy ways acknowledge him, and he shall direct thy paths.', 'Trust God more than your own plans. When you include him in every choice, he guides your steps.'],
+  ['Isaiah 40:31', 'But they that wait upon the LORD shall renew their strength; they shall mount up with wings as eagles; they shall run, and not be weary; and they shall walk, and not faint.', 'When you are worn out, lean on God. He renews your energy so you can keep going without quitting.'],
+  ['Galatians 6:9', 'And let us not be weary in well doing: for in due season we shall reap, if we faint not.', 'Don\'t get tired of doing the right thing. The harvest comes in time if you don\'t give up.'],
+  ['2 Timothy 1:7', 'For God hath not given us the spirit of fear; but of power, and of love, and of a sound mind.', 'God doesn\'t make you timid. He gives you strength, love, and a clear, steady mind.'],
+  ['Philippians 3:14', 'I press toward the mark for the prize of the high calling of God in Christ Jesus.', 'Keep your eyes on the goal and keep pressing forward. God has something worth reaching for.'],
+  ['Isaiah 41:10', 'Fear thou not; for I am with thee: be not dismayed; for I am thy God: I will strengthen thee; yea, I will help thee; yea, I will uphold thee with the right hand of my righteousness.', 'Don\'t be afraid. God promises to be with you, to strengthen you, and to hold you up.'],
+  ['Matthew 6:33', 'But seek ye first the kingdom of God, and his righteousness; and all these things shall be added unto you.', 'Make God your first priority and the rest of life falls into place.'],
+  ['James 1:12', 'Blessed is the man that endureth temptation: for when he is tried, he shall receive the crown of life, which the Lord hath promised to them that love him.', 'Staying faithful through a hard test is a blessing. God rewards those who keep loving him.'],
+  ['1 Corinthians 9:27', 'But I keep under my body, and bring it into subjection: lest that by any means, when I have preached to others, I myself should be a castaway.', 'Paul trains and disciplines his body so he doesn\'t fail the very race he tells others to run.'],
+  ['Romans 5:3-4', 'And not only so, but we glory in tribulations also: knowing that tribulation worketh patience; and patience, experience; and experience, hope:', 'Hard times build patience, patience builds character, and character builds hope.'],
+  ['Proverbs 27:17', 'Iron sharpeneth iron; so a man sharpeneth the countenance of his friend.', 'People sharpen each other. A good friend or spouse makes you better.'],
+  ['Ecclesiastes 4:9-10', 'Two are better than one; because they have a good reward for their labour. For if they fall, the one will lift up his fellow:', 'Two people do better than one, because when one falls, the other helps them up.'],
+  ['1 Corinthians 6:19-20', 'What? know ye not that your body is the temple of the Holy Ghost which is in you, which ye have of God, and ye are not your own? For ye are bought with a price: therefore glorify God in your body, and in your spirit, which are God\'s.', 'Your body belongs to God. Taking care of it is one way you honor him.'],
+  ['Jeremiah 29:11', 'For I know the thoughts that I think toward you, saith the LORD, thoughts of peace, and not of evil, to give you an expected end.', 'God has good plans for you, plans for peace and a hopeful future.'],
+  ['Philippians 4:6', 'Be careful for nothing; but in every thing by prayer and supplication with thanksgiving let your requests be made known unto God.', 'Don\'t worry about anything. Pray about everything, thank God, and tell him what you need.'],
+  ['Hebrews 11:1', 'Now faith is the substance of things hoped for, the evidence of things not seen.', 'Faith means being sure of what you hope for and certain of what you can\'t see yet.'],
+  ['Matthew 11:28', 'Come unto me, all ye that labour and are heavy laden, and I will give you rest.', 'If you\'re tired and weighed down, come to Jesus and he will give you rest.'],
+  ['Hebrews 12:1', 'Wherefore seeing we also are compassed about with so great a cloud of witnesses, let us lay aside every weight, and the sin which doth so easily beset us, and let us run with patience the race that is set before us,', 'Let go of whatever slows you down and run your race with patience, with people cheering you on.'],
+  ['2 Corinthians 12:9', 'And he said unto me, My grace is sufficient for thee: for my strength is made perfect in weakness.', 'God\'s help is enough for you. His power shows up best when you feel weak.'],
+  ['John 3:16', 'For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.', 'God\'s love is so big that he gave his own Son, so anyone who trusts him gets life that never ends.'],
+  ['Romans 8:28', 'And we know that all things work together for good to them that love God, to them who are the called according to his purpose.', 'Even the hard and confusing parts, God works into something good for those who love him.'],
+  ['Romans 12:1', 'I beseech you therefore, brethren, by the mercies of God, that ye present your bodies a living sacrifice, holy, acceptable unto God, which is your reasonable service.', 'Because of all God has done for you, offer your whole self, even your body and daily habits, to him as an act of worship.'],
+  ['Galatians 2:20', 'I am crucified with Christ: nevertheless I live; yet not I, but Christ liveth in me: and the life which I now live in the flesh I live by the faith of the Son of God, who loved me, and gave himself for me.', 'Your old self died with Christ. The life you live now is lived by trusting him, because he loved you and gave himself for you.'],
+  ['Micah 6:8', 'He hath shewed thee, O man, what is good; and what doth the LORD require of thee, but to do justly, and to love mercy, and to walk humbly with thy God?', 'God keeps it simple: do what is right, love showing mercy, and walk humbly with him.'],
+  ['Lamentations 3:22-23', 'It is of the LORD\'s mercies that we are not consumed, because his compassions fail not. They are new every morning: great is thy faithfulness.', 'God\'s mercy never runs out. It starts fresh every morning, which is a good reminder at the start of your day.'],
+  ['John 15:5', 'I am the vine, ye are the branches: He that abideth in me, and I in him, the same bringeth forth much fruit: for without me ye can do nothing.', 'Stay connected to Jesus. Lasting fruit comes from staying close to him, not from your effort alone.'],
+  ['Ephesians 2:8-9', 'For by grace are ye saved through faith; and that not of yourselves: it is the gift of God: Not of works, lest any man should boast.', 'You can\'t earn salvation. It is a gift from God, received by faith.'],
+  ['Psalm 139:14', 'I will praise thee; for I am fearfully and wonderfully made: marvellous are thy works; and that my soul knoweth right well.', 'God made you with care and wonder. Be thankful for the body and the life he gave you.'],
+  ['Psalm 51:10', 'Create in me a clean heart, O God; and renew a right spirit within me.', 'A prayer for a fresh start: ask God to clean your heart and give you a steady, right spirit.'],
+  ['Romans 12:2', 'And be not conformed to this world: but be ye transformed by the renewing of your mind, that ye may prove what is that good, and acceptable, and perfect, will of God.', 'Don\'t just copy the world around you. Let God change how you think, and you will see what his good plan looks like.'],
+  ['1 John 4:19', 'We love him, because he first loved us.', 'Your love for God is an answer to his love, which came first.'],
+  ['Isaiah 53:5', 'But he was wounded for our transgressions, he was bruised for our iniquities: the chastisement of our peace was upon him; and with his stripes we are healed.', 'Jesus took the punishment we deserved, and through what he suffered we are made whole.'],
+  ['Ephesians 3:20', 'Now unto him that is able to do exceeding abundantly above all that we ask or think, according to the power that worketh in us,', 'God can do far more than you could ask or imagine, and his power is already at work in you.'],
+  ['Matthew 16:24', 'Then said Jesus unto his disciples, If any man will come after me, let him deny himself, and take up his cross, and follow me.', 'Following Jesus means saying no to yourself sometimes and carrying your cross. A good fit for a hard challenge.'],
+  ['Proverbs 4:23', 'Keep thy heart with all diligence; for out of it are the issues of life.', 'Guard your heart carefully, because everything in your life flows from it.'],
+  ['2 Timothy 4:7', 'I have fought a good fight, I have finished my course, I have kept the faith:', 'Paul looks back on a life of staying faithful to the end. Finish your race the same way.'],
+];
+// A fixed shuffle, so every device shows the same verse on the same day. The last verse stays last, to finish on Day 75.
+const VERSES = (() => { const a = VERSE_POOL.slice(0, -1); let x = 7511; const rnd = () => { x |= 0; x = x + 0x6D2B79F5 | 0; let t = Math.imul(x ^ x >>> 15, 1 | x); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return [...a, VERSE_POOL[VERSE_POOL.length - 1]]; })();
+function verseFor(p) { const n = dayNum(p), i = Math.min(VERSES.length, Math.max(1, Math.ceil(Math.max(n, 1) / 2))); return { n, wk: i, ref: VERSES[i - 1][0], text: VERSES[i - 1][1], sum: VERSES[i - 1][2] }; }
+function verseHtml(v, hide) {
+  const words = v.text.split(' '); let k = 0;
+  return words.map(w => { k++; if (!hide || k % 2) return esc(w); const m = w.match(/^(\W*)(\w)(\w*)(\W*)$/); return m ? esc(m[1] + m[2]) + '<span style="opacity:.55">' + '_'.repeat(Math.max(2, m[3].length)) + '</span>' + esc(m[4]) : esc(w); }).join(' ');
+}
+function drawVerse() {
+  const o = $('overlay'), v = verseFor(S.me);
+  o.innerHTML = `<div class="over" style="overflow-y:auto"><div class="box2" id="verseBox" style="margin:auto;width:100%;text-align:center">
+    <div class="e">${v.n >= 1 ? 'Day ' + v.n + ' &middot; ' : ''}Verse ${v.wk} of ${VERSES.length}</div>
+    <div class="m" style="font-size:22px;line-height:1.45;margin:16px 0 10px">&ldquo;${verseHtml(v, S.vhide)}&rdquo;</div>
+    <div style="font-weight:700;margin-bottom:6px">${esc(v.ref)}</div>
+    <p style="margin:0 0 18px;font-size:14px;line-height:1.5;color:var(--dim)">${esc(v.sum)}</p>
+    <div class="row" style="gap:10px;justify-content:center"><button class="btn ghost" data-vtest="1">${S.vhide ? 'Show every word' : 'Test myself'}</button><button class="btn" data-vclose="1">Let's go</button></div></div></div>`;
+}
+function checkVerse() {
+  if (S.verseDay === TD || $('overlay').innerHTML) return;
+  S.verseDay = TD;
+  const key = `verse-${S.user.id}-${TD}`;
+  try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (_) { }
+  S.vhide = false; drawVerse();
+}
+function verseTile() {
+  const v = verseFor(S.me);
+  return `<div class="card"><div class="lbl">Your verse &middot; ${esc(v.ref)}</div><p style="margin:8px 0 12px;font-size:15px;line-height:1.5">&ldquo;${esc(v.text)}&rdquo;</p><p class="note" style="margin:0 0 12px">${esc(v.sum)}</p><button class="btn ghost sm" data-vopen="1">Test myself</button></div>`;
+}
 // ---------- Daddy's one-way message to Taylor's phone ----------
 const NUDGES = ['Drink your water', 'Get your workout in', 'Go read your 10 pages', 'Progress photo time', 'Proud of you', 'Love you'];
 function nudgeTile() {
@@ -329,7 +397,7 @@ function vToday() {
         : k === 'reading' ? readTile(v)
         : k === 'photo' ? photoTile(v)
         : `<div class="card dtile" data-tile="single">${GRIP}<div class="lbl" style="margin-bottom:14px">Today's rings</div><div class="rings">${small}</div></div>`).join('')}</div>
-    <div style="height:14px"></div>${other}${nudgeTile()}
+    <div style="height:14px"></div>${other}${nudgeTile()}${verseTile()}
     <div style="text-align:center;margin-top:8px"><button class="link" id="signout">Sign out</button></div>`;
 }
 
@@ -1023,8 +1091,8 @@ function vProgress() {
   const cells = Array.from({ length: 75 }, (_, i) => { const dd = addDays(p.start_date, i), ph = photoOf(dd); const u = ph && S.urls[ph]; return `<div class="${ph ? 'has' : ''} thumb" ${u ? `data-pv="${esc(ph)}" data-cap="Day ${i + 1} &middot; ${pretty(dd)}" style="background-image:url('${u}')"` : ''}>${i + 1}</div>`; }).join('');
   const due = CHECKS.find(c => n >= c && !ws.some(x => x.day_num === c));
   const slots = CHECKS.map(c => {
-    const rec = ws.find(x => x.day_num === c), open = n >= c;
-    return `<div class="row" style="gap:8px;margin-top:8px"><div style="width:62px;font-size:14px;font-weight:700">Day ${c}</div>${open || rec ? `<input type="number" class="ctl" id="wt-${c}" placeholder="lb" step="0.1" min="50" max="600" value="${rec ? +rec.weight : ''}" ${mine ? '' : 'disabled'}>${mine ? `<button class="btn sm ctl" data-wslot="${c}" style="white-space:nowrap">${rec ? 'Update' : 'Log'}</button>` : ''}${due === c ? '<span class="badge">Due</span>' : ''}` : `<span class="note" style="margin:0">Unlocks on Day ${c}</span>`}</div>`;
+    const rec = ws.find(x => x.day_num === c), open = n >= c, locked = !!rec && n > c;   // once the check-in day has passed, a logged weight is locked in
+    return `<div class="row" style="gap:8px;margin-top:8px"><div style="width:62px;font-size:14px;font-weight:700">Day ${c}</div>${open || rec ? `<input type="number" class="ctl" id="wt-${c}" placeholder="lb" step="0.1" min="50" max="600" value="${rec ? +rec.weight : ''}" ${mine && !locked ? '' : 'disabled'}>${locked ? '<span class="badge good" style="white-space:nowrap">Locked</span>' : mine ? `<button class="btn sm ctl" data-wslot="${c}" style="white-space:nowrap">${rec ? 'Update' : 'Log'}</button>` : ''}${due === c ? '<span class="badge">Due</span>' : ''}` : `<span class="note" style="margin:0">Unlocks on Day ${c}</span>`}</div>`;
   }).join('');
   const tiles = {
     numbers: `<div class="card dtile" data-tile="numbers">${GRIP}<div class="lbl" style="margin-bottom:12px;padding-right:44px">${esc(p.name)}'s numbers</div>
@@ -1121,7 +1189,7 @@ function render() {
   app.className = (!editable() && S.view !== 'split') ? 'ro' : '';
   nav.innerHTML = TABS.map(([k, l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}"><svg width="22" height="22" viewBox="0 0 24 24">${ICONS[k]}</svg>${l}</button>`).join('');
   if (checkSetup()) return;
-  checkAllRings(); checkCelebrate(); checkRestart(); ensureUrls(); animateArcs();
+  checkVerse(); checkAllRings(); checkCelebrate(); checkRestart(); ensureUrls(); animateArcs();
 }
 function needSetup() { return S.me && dayNum(S.me) >= 1 && !S.me.setup_done; }
 function checkSetup() {
@@ -1462,6 +1530,9 @@ document.addEventListener('click', async e => {
   if (d.amino) { const r = dailyRow(u, today), on = !!r.amino; if (!on) { S.anim = 'amino'; setTimeout(() => { S.anim = null; }, 1500); } return saveDaily(today, { amino: !on, water_oz: on ? Math.max(0, r.water_oz - 8) : r.water_oz + 8 }); }
   if (d.jug !== undefined) { const js = jugsFor(viewed()), am = exOz(dailyRow(u, today)), idx = +d.jug, oz = dailyRow(u, today).water_oz - am, upto = js.slice(0, idx + 1).reduce((a, b) => a + b, 0), below = js.slice(0, idx).reduce((a, b) => a + b, 0); return saveDaily(today, { water_oz: (oz >= upto ? below : upto) + am }); }
   if (d.cup) { const r = dailyRow(u, today), ex = exOz(r); return saveDaily(today, { water_oz: (r.water_oz - ex >= 128 ? 120 : 128) + ex }); }
+  if (d.vclose) { $('overlay').innerHTML = ''; S.vhide = false; render(); return; }
+  if (d.vtest) { S.vhide = !S.vhide; drawVerse(); return; }
+  if (d.vopen) { if ($('overlay').innerHTML) return; S.vhide = true; drawVerse(); return; }
   if (d.nudge) { if (!isDaddy(S.me)) return; return sendNudge(d.nudge); }
   if (d.nudgego) { if (!isDaddy(S.me)) return; return sendNudge(($('nmsg') || {}).value); }
   if (d.supp) { const r = dailyRow(u, today), on = !!r.supp; if (!on) { S.anim = 'supp'; setTimeout(() => { S.anim = null; }, 1500); } return saveDaily(today, { supp: !on }); }
@@ -1487,6 +1558,7 @@ document.addEventListener('click', async e => {
   }
   if (d.wslot) {
     const c = +d.wslot, inp = $('wt-' + c), w = parseFloat(inp && inp.value);
+    if ((D.weigh[u] || []).some(x => x.day_num === c) && dayNum(D.profiles.find(p => p.id === u) || S.me) > c) { toast(`Day ${c} weight is locked in.`); return; }
     if (!(w >= 50 && w <= 600)) { toast('Enter your weight in pounds.'); return; }
     await must(sb.from('weigh_ins').upsert({ user_id: u, day_num: c, weight: w }, { onConflict: 'user_id,day_num' })); await loadAll(); render(); toast(`Day ${c} weight saved.`); return;
   }
