@@ -683,6 +683,10 @@ function liftTile(p, key) {
   const top = lt ? lt.rows.slice().sort((a, b) => (+b.weight || 0) - (+a.weight || 0) || a.set_no - b.set_no)[0] : null, src = done[done.length - 1] || top || {};
   const wv = src.weight != null && +src.weight > 0 ? +src.weight : '', rv = src.reps ?? '', tsec = src.seconds || 0;
   const sv = 1, mv = tsec ? Math.floor(tsec / 60) : '', tv = tsec ? tsec % 60 : '';
+  const tw = top && +top.weight > 0 ? +top.weight : 0, tr = top && top.reps ? top.reps + 1 : 0;   // today's target: last time's best set, one more rep
+  const all = (D.sets[p.id] || []).filter(r => r.exercise.toLowerCase() === n.toLowerCase() && r.reps && +r.weight > 0), pr = all.sort((x, y) => (+y.weight) - (+x.weight) || y.reps - x.reps)[0];   // all-time best set
+  const hit = tr && done.some(r => r.reps && ((+r.weight || 0) > tw || ((+r.weight || 0) === tw && r.reps >= tr)));
+  const tgt = tr ? `<div class="tgt${hit ? ' hit' : ''}"><div style="flex:1;min-width:0"><div class="k">${hit ? 'Target hit' : "Today's target"}</div><div class="v">${hit ? 'Beat last time. Nice.' : (tw ? tw + ' lb x ' : '') + tr + (tw ? '' : ' reps')}</div>${pr ? `<div class="pr">Your PR: ${+pr.weight} lb x ${pr.reps}</div>` : ''}</div>${hit ? '' : `<button class="btn sm ctl" data-ltarget="${tw}|${tr}">Use it</button>`}</div>` : '';
   const sum = fin ? 'Done' : done.length ? `${done.length} set${done.length === 1 ? '' : 's'}` : 'No sets yet';
   const fld = (cls, label, ph, val, extra = '') => `<label class="fld"><span>${label}</span><input type="number" class="ctl ${cls}" inputmode="${cls === 'lw' ? 'decimal' : 'numeric'}" min="0" ${extra} placeholder="${ph}" value="${val}"></label>`;
   const rows = done.map(r => `<div class="row" style="border-top:1px solid var(--line);padding:8px 0"><span class="badge">Set ${r.set_no}</span><span style="flex:1;font-size:15px">${fmtSet(r)}</span></div>`).join('');
@@ -690,7 +694,7 @@ function liftTile(p, key) {
     <button class="ctl" data-ltoggle="${esc(key)}" style="display:block;width:100%;background:none;border:0;color:var(--text);font:inherit;padding:0 44px 0 0;text-align:left"><div class="lbl" style="color:var(--acc)">${MNAME[m]}</div>
       <div class="row" style="margin-top:6px;gap:10px"><b style="flex:1;font-size:17px">${esc(n)}</b><span class="badge ${fin ? 'good' : ''}">${fin ? tick + ' ' : ''}${sum}</span><svg width="14" height="14" viewBox="0 0 14 14" style="transform:rotate(${open ? 180 : 0}deg);opacity:.5;flex:none"><path d="M2 5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div></button>
     ${!done.length && !fin && canEdit(p.id) ? `<div class="row" style="margin-top:10px"><button class="btn sm red ctl" data-lremove="${esc(key)}">Remove</button></div>` : ''}
-    ${open ? `${lt ? `<p class="note" style="margin:8px 0 0">Last time (${pretty(lt.day)}): ${lastSummary(lt.rows)}</p>` : ''}<div style="margin-top:8px">${rows}</div>
+    ${open ? `${lt ? `<p class="note" style="margin:8px 0 0">Last time (${pretty(lt.day)}): ${lastSummary(lt.rows)}</p>` : ''}${tgt}<div style="margin-top:8px">${rows}</div>
       <div class="lgrid">${fld('lw', 'Weight (lb)', 'lb', wv, 'step="0.5"')}${fld('lr', 'Reps', 'reps', rv)}${fld('ls', 'Sets', '1', sv, 'max="20"')}</div>
       <div class="lgrid two">${fld('lm', 'Time min', 'min', mv)}${fld('lt', 'Time sec', 'sec', tv, 'max="59"')}</div>
       <div class="lbtns l3"><button class="btn sm ctl big" data-logset="1">Log set</button><button class="btn sm amber ctl" data-lundo="1">Undo</button><button class="btn sm blue ctl" data-lcomp="1">Complete</button><button class="btn sm violet ctl" data-lhist="1">Historical lifts</button></div>` : ''}</div>`;
@@ -1480,6 +1484,7 @@ document.addEventListener('click', async e => {
     }
     return;
   }
+  if (d.ltarget) { const [w, r] = d.ltarget.split('|'), box = t.closest('.lift'); box.querySelector('.lw').value = +w > 0 ? w : ''; box.querySelector('.lr').value = r; return; }
   if (d.lundo) {
     const key = t.closest('.lift').dataset.lb, name = key.slice(key.indexOf('|') + 1), rows = todaySets(u, name), last = rows[rows.length - 1];
     if (!last) { toast('No sets logged yet to undo.'); return; }
