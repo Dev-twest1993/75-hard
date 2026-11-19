@@ -380,11 +380,12 @@ function vToday() {
   const pr = partner(), v = viewed();
   if (S.view === 'split') {
     const c = dayCounter(S.me);
+    const LB = WIDE() ? 'font-size:12px;letter-spacing:.2em;margin-top:6px;white-space:nowrap' : 'font-size:10px;letter-spacing:.16em;margin-top:5px;white-space:nowrap';
     const RS = Math.max(100, Math.min(160, Math.floor((Math.min(window.innerWidth, 520) - 32 - 10) / 2 - 34)));
     const col = p => { const done = complete(p.id, TD);
       return `<div class="p"><h3>${esc(p.name)}</h3>${allRings(p.id, { size: RS, stroke: RS < 150 ? 9 : 11, step: RS < 150 ? 11 : 14 })}
       <div style="margin-top:10px"><span class="badge ${done ? 'good' : ''}">${done ? 'Day complete' : 'In progress'}</span></div></div>`; };
-    return header('Today') + `<div class="card" style="text-align:center${WIDE() ? '' : ';padding:12px'}"><div class="big">${ring(WIDE() ? 200 : 140, WIDE() ? 12 : 10, c.frac, '#00e676', `<span class="days" style="font-size:${WIDE() ? 64 : 44}px">${c.left}</span><span class="dayslbl">${c.sub}</span>${c.day ? `<span class="dayslbl" style="color:var(--acc);font-weight:700">${c.day}</span>` : ''}`)}</div></div><div class="split">${col(S.me)}${col(pr)}</div>${cal75([S.me, pr])}
+    return header('Today') + `<div class="card" style="text-align:center${WIDE() ? '' : ';padding:12px'}"><div class="big">${ring(WIDE() ? 200 : 140, WIDE() ? 12 : 10, c.frac, '#00e676', `<span class="days" style="font-size:${WIDE() ? 64 : 42}px">${c.left}</span><span class="dayslbl" style="${LB}">${c.sub}</span>${c.day ? `<span class="dayslbl" style="${LB};color:var(--acc);font-weight:700;margin-top:3px">${c.day}</span>` : ''}`)}</div></div><div class="split">${col(S.me)}${col(pr)}</div>${cal75([S.me, pr])}
       <p class="note" style="margin-top:12px">Live view. When ${esc(pr.name)} checks something off, it shows up here.</p>`;
   }
   const f = rings(v.id, TD), c = dayCounter(v);
