@@ -501,7 +501,7 @@ function photoTile(v) {
 }
 function readTile(v) {
   const pages = dailyRow(v.id, TD).pages, done = pages >= 10, ed = editable() && canEdit(v.id);
-  const r = ring(96, 9, Math.min(pages / 10, 1), COLORS.reading, `<span class="num" style="font-size:24px;font-weight:800">${pages}</span><span class="lbl" style="font-size:9px">of 10 pages</span>`);
+  const r = ring(96, 9, Math.min(pages / 10, 1), COLORS.reading, `<span class="num" style="font-size:26px;font-weight:800;line-height:1">${pages}</span><span class="lbl" style="font-size:11px;letter-spacing:.04em;margin:3px 0 0;white-space:nowrap">of 10</span>`);
   return `<div class="card dtile cmp" data-tile="reading">${GRIP}<div class="lbl" style="margin-bottom:8px">Reading</div><div class="big">${ed ? `<button class="ctl" data-rclose="1" style="background:none;border:0;padding:0;color:inherit" aria-label="${done ? 'Reading done. Tap to undo' : 'Tap to close the reading ring'}">${r}</button>` : r}</div><p class="note" style="text-align:center;margin:8px 0 0">${done ? 'Done. Tap the ring to undo.' : 'Tap the ring when you hit 10 pages.'}</p></div>`;
 }
 function greet() { const h = new Date().getHours(); return h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'; }
