@@ -693,7 +693,7 @@ function liftTile(p, key) {
     ${open ? `${lt ? `<p class="note" style="margin:8px 0 0">Last time (${pretty(lt.day)}): ${lastSummary(lt.rows)}</p>` : ''}<div style="margin-top:8px">${rows}</div>
       <div class="lgrid">${fld('lw', 'Weight (lb)', 'lb', wv, 'step="0.5"')}${fld('lr', 'Reps', 'reps', rv)}${fld('ls', 'Sets', '1', sv, 'max="20"')}</div>
       <div class="lgrid two">${fld('lm', 'Time min', 'min', mv)}${fld('lt', 'Time sec', 'sec', tv, 'max="59"')}</div>
-      <div class="lbtns"><button class="btn sm ctl" data-logset="1">Log set</button><button class="btn sm amber ctl" data-lundo="1">Undo</button><button class="btn sm blue ctl" data-lcomp="1">Complete</button><button class="btn sm violet ctl" data-lhist="1">Historical lifts</button></div>` : ''}</div>`;
+      <div class="lbtns l3"><button class="btn sm ctl big" data-logset="1">Log set</button><button class="btn sm amber ctl" data-lundo="1">Undo</button><button class="btn sm blue ctl" data-lcomp="1">Complete</button><button class="btn sm violet ctl" data-lhist="1">Historical lifts</button></div>` : ''}</div>`;
 }
 function liftSession(p) {
   return `<div id="lifts" data-dragbox="lifts">${lKeys().map(k => liftTile(p, k)).join('')}</div>
