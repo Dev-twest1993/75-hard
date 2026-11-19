@@ -66,10 +66,10 @@ async function allSets() {
   return { data: out, error: null };
 }
 async function loadAll() {
-  const [p, d, w, b, wi, g, m, lf, wp, fp, ml, sm] = await Promise.all([
+  const [p, d, w, b, wi, g, m, lf, wp, fp, ml, sm, cl] = await Promise.all([
     sb.from('profiles').select('*'), sb.from('daily').select('*'), sb.from('workouts').select('*'),
     sb.from('books').select('*').order('created_at'), sb.from('weigh_ins').select('*').order('day_num'),
-    sb.from('groceries').select('*').order('created_at'), sb.from('meal_plan').select('*'), allSets(), sb.from('workout_plans').select('*'), sb.from('fun_photos').select('*').order('created_at', { ascending: false }), sb.from('meal_log').select('*').order('created_at'), sb.from('saved_meals').select('*').order('created_at', { ascending: false })
+    sb.from('groceries').select('*').order('created_at'), sb.from('meal_plan').select('*'), allSets(), sb.from('workout_plans').select('*'), sb.from('fun_photos').select('*').order('created_at', { ascending: false }), sb.from('meal_log').select('*').order('created_at'), sb.from('saved_meals').select('*').order('created_at', { ascending: false }), sb.from('custom_lifts').select('*').order('created_at')
   ]);
   for (const r of [p, d, w, b, wi, g, m, lf, wp, fp, ml, sm]) if (r.error) { toast(r.error.message); return; }
   D.profiles = p.data;
@@ -78,6 +78,7 @@ async function loadAll() {
   D.books = {}; b.data.forEach(r => (D.books[r.user_id] ||= []).push(r));
   D.weigh = {}; wi.data.forEach(r => (D.weigh[r.user_id] ||= []).push(r));
   D.plans = {}; D.detail = {}; wp.data.forEach(r => { D.plans[r.user_id + '|' + r.day] = r.items; D.detail[r.user_id + '|' + r.day] = r.detail; });
+  D.clifts = cl.error ? (D.clifts || []) : cl.data;   // your own added lifts; a hiccup here should not block the app
   D.mlog = ml.data; D.saved = sm.data; D.fun = fp.data; D.groceries = g.data;
   D.sets = {}; lf.data.forEach(r => (D.sets[r.user_id] ||= []).push(r));
   D.meals = {}; m.data.forEach(r => D.meals[r.day_idx + '|' + r.slot] = r.text);
@@ -574,10 +575,19 @@ function liftPick(p, bare) {
     ${lstep() === 'plan' ? planSection() : ''}
     ${logged && !CTX ? `<p class="note" style="margin:10px 0 0">${logged} set${logged === 1 ? '' : 's'} logged today.</p>` : ''}`);
 }
+// Lifts you added yourself, kept for good: the ones you saved, any you have logged before, and any in today's plan.
+function myLifts(m, have = []) {
+  const u = actor().id, seen = new Set(LIB[m].map(n => n.toLowerCase())), out = [];
+  const add = n => { const k = String(n || '').trim().toLowerCase(); if (!k || seen.has(k)) return; seen.add(k); out.push(String(n).trim()); };
+  (D.clifts || []).filter(r => r.user_id === u && r.muscle === m).forEach(r => add(r.name));
+  (D.sets[u] || []).filter(r => r.muscle === m).forEach(r => add(r.exercise));
+  have.forEach(add);
+  return out;
+}
 function planSection() {
   const plan = lplan(), sel = lsel();
   const block = m => {
-    const have = plan[m] || [], extra = have.filter(n => !LIB[m].includes(n)), other = (S.pOther ||= {})[m];
+    const have = plan[m] || [], extra = myLifts(m, have), other = (S.pOther ||= {})[m];
     const chips = [...LIB[m], ...extra].map(n => `<button class="ctl ${have.includes(n) ? 'on' : ''}" data-ptog="${m}|${esc(n)}">${esc(n)}</button>`).join('') + `<button class="ctl ${other ? 'on' : ''}" data-pother="${m}">+ Other</button>`;
     return `<div style="margin-top:18px"><div class="row sp"><div class="lbl">${MNAME[m]}</div>${have.length ? `<span class="badge">${have.length} picked</span>` : ''}</div>
       <div class="chips" style="margin:10px 0 0">${chips}</div>
@@ -586,7 +596,7 @@ function planSection() {
   const total = sel.reduce((n, m) => n + (plan[m] || []).length, 0);
   return `<div style="border-top:1px solid var(--line);margin-top:18px;padding-top:16px"><div class="lbl">${(S.wtype.indoor || 'Lift') === 'Lift' ? 'Pick your lifts' : 'Pick your workouts'}</div><p class="note" style="margin:6px 0 0">${(S.wtype.indoor || 'Lift') === 'Lift' ? 'Tap every lift you want to do for each muscle group.' : 'Tap every workout you want to do. Use + Other for your own.'}</p>
     ${sel.map(block).join('')}
-    <div class="row" style="margin-top:18px"><button class="btn ctl" id="${CTX ? 'csave' : 'lgo'}" ${total ? '' : 'disabled style="opacity:.45"'}>${CTX ? 'Save workout' : 'Let\'s get after it!'}</button></div></div>`;
+    <div class="row" style="margin-top:18px;gap:8px">${!CTX && wInfo(wRow(actor().id, TD, 'indoor')).st === 'idle' ? `<button class="btn ghost ctl" id="psave" ${total ? '' : 'disabled style="opacity:.45"'}>Save workout</button>` : ''}<button class="btn ctl" id="${CTX ? 'csave' : 'lgo'}" ${total ? '' : 'disabled style="opacity:.45"'}>${CTX ? 'Save workout' : 'Let\'s get after it!'}</button></div></div>`;
 }
 function lastSummary(rows) {   // just the headline number from the previous session
   const w = Math.max(0, ...rows.map(r => +r.weight || 0)); if (w > 0) return `${w} lb`;
@@ -603,7 +613,7 @@ function liftTile(p, key) {
   const sum = fin ? 'Done' : done.length ? `${done.length} set${done.length === 1 ? '' : 's'}` : 'No sets yet';
   const fld = (cls, label, ph, val, extra = '') => `<label class="fld"><span>${label}</span><input type="number" class="ctl ${cls}" inputmode="${cls === 'lw' ? 'decimal' : 'numeric'}" min="0" ${extra} placeholder="${ph}" value="${val}"></label>`;
   const rows = done.map(r => `<div class="row" style="border-top:1px solid var(--line);padding:8px 0"><span class="badge">Set ${r.set_no}</span><span style="flex:1;font-size:15px">${fmtSet(r)}</span></div>`).join('');
-  return `<div class="card dtile lift" data-lb="${esc(key)}" style="padding-bottom:${open ? 14 : 18}px">${GRIP}
+  return `<div class="card dtile lift${fin ? ' ldone' : ''}" data-lb="${esc(key)}" style="padding-bottom:${open ? 14 : 18}px">${GRIP}
     <button class="ctl" data-ltoggle="${esc(key)}" style="display:block;width:100%;background:none;border:0;color:var(--text);font:inherit;padding:0 44px 0 0;text-align:left"><div class="lbl" style="color:var(--acc)">${MNAME[m]}</div>
       <div class="row" style="margin-top:6px;gap:10px"><b style="flex:1;font-size:17px">${esc(n)}</b><span class="badge ${fin ? 'good' : ''}">${fin ? tick + ' ' : ''}${sum}</span><svg width="14" height="14" viewBox="0 0 14 14" style="transform:rotate(${open ? 180 : 0}deg);opacity:.5;flex:none"><path d="M2 5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div></button>
     ${!done.length && !fin && canEdit(p.id) ? `<div class="row" style="margin-top:10px"><button class="btn sm red ctl" data-lremove="${esc(key)}">Remove</button></div>` : ''}
@@ -1262,6 +1272,13 @@ document.addEventListener('click', async e => {
     const labels = c.type === 'Lift' ? c.sel.map(m => MNAME[m]) : [c.type];
     S.cdEditing = null; CTX = false; saveDayPlan(u, day, labels, { type: c.type, sel: c.sel.slice(), plan }); toast('Plan saved for ' + pretty(day) + '.'); return;
   }
+  if (t.id === 'psave') {   // save today's full workout (muscles plus the lifts picked) without starting it
+    if (!editable()) return;
+    const plan = {}; S.lsel.forEach(m => { plan[m] = (S.plan[m] || []).slice(); });
+    if (!S.lsel.some(m => plan[m].length)) { toast('Pick at least one workout first.'); return; }
+    const type = S.wtype.indoor || 'Lift', labels = type === 'Lift' ? S.lsel.map(m => MNAME[m]) : [type];
+    saveDayPlan(u, TD, labels, { type, sel: S.lsel.slice(), plan }); toast("Today's workout saved. Start it whenever you're ready."); return;
+  }
   if (t.id === 'csave') {
     if (!editable()) return;
     const c = S.cd, day = S.calSel, plan = {}; c.sel.forEach(m => { plan[m] = (c.plan[m] || []).slice(); });
@@ -1293,7 +1310,12 @@ document.addEventListener('click', async e => {
   if (d.lplan) { S.hist = null; setLstep('plan'); $('app').scrollTo(0, 0); render(); return; }
   if (d.ptog) { const i = d.ptog.indexOf('|'), m = d.ptog.slice(0, i), n = d.ptog.slice(i + 1), pl = lplan(); pl[m] = pl[m] || []; const k = pl[m].indexOf(n); if (k >= 0) pl[m].splice(k, 1); else pl[m].push(n); savePlan(); render(); return; }
   if (d.pother) { (S.pOther ||= {})[d.pother] = !S.pOther[d.pother]; render(); return; }
-  if (d.paddc) { const m = d.paddc, inp = $('pcustom-' + m), n = inp ? inp.value.trim() : ''; if (!n) { toast('Type a lift name first.'); return; } const pl = lplan(); pl[m] = pl[m] || []; if (!pl[m].some(x => x.toLowerCase() === n.toLowerCase())) pl[m].push(n); S.pOther[m] = false; savePlan(); render(); return; }
+  if (d.paddc) { const m = d.paddc, inp = $('pcustom-' + m), n = inp ? inp.value.trim() : ''; if (!n) { toast('Type a lift name first.'); return; } const pl = lplan(); pl[m] = pl[m] || []; if (!pl[m].some(x => x.toLowerCase() === n.toLowerCase())) pl[m].push(n); S.pOther[m] = false; savePlan(); render();
+    if (!LIB[m].some(x => x.toLowerCase() === n.toLowerCase()) && !(D.clifts || []).some(r => r.user_id === u && r.muscle === m && r.name.toLowerCase() === n.toLowerCase())) {
+      const row = { id: crypto.randomUUID(), user_id: u, muscle: m, name: n }; (D.clifts ||= []).push(row);
+      sb.from('custom_lifts').insert(row).then(({ error }) => { if (error && !/duplicate|unique/i.test(error.message)) toast("Couldn't save that lift for later: " + error.message); });
+    }
+    return; }
   if (d.ltoggle) { (S.opn ||= {})[d.ltoggle] = !S.opn[d.ltoggle]; render(); return; }
   if (d.lremove) {
     if (!editable()) return;
